@@ -10,4 +10,8 @@
 	<PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
 		<DefineConstants>WINDOWS</DefineConstants>
 	</PropertyGroup>
+	<ItemGroup>
+		<Compile Remove="tests/**/*.cs" />
+		<None Remove="tests/**/*.cs" />
+	</ItemGroup>
 </Project>

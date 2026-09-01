@@ -321,3 +321,18 @@ The author is not responsible for any misuse of this tool or any legal
 consequences arising from its use.\
 Please ensure you comply with all local laws and regulations regarding
 network scanning.
+## Testing
+
+The solution includes xUnit v3 test projects under `tests/` for unit,
+loopback-only integration, and opt-in end-to-end coverage. The default suite
+requires no public network, ASN database, or Xray:
+
+```powershell
+dotnet test CFScanner.sln
+dotnet test CFScanner.sln -- --filter-trait "Category=Unit"
+dotnet test CFScanner.sln -- --filter-not-trait "Category=E2E"
+dotnet test CFScanner.sln --coverage
+```
+
+End-to-end tests are skipped unless `CFSCANNER_RUN_E2E=1` is set. Real Xray
+coverage is opt-in via `CFSCANNER_RUN_XRAY_TESTS=1`.

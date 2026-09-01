@@ -15,6 +15,13 @@ public class IpFilter
     public int RangeCount => _ranges.Count;
 
     /// <summary>
+    /// Removes all currently held exclusion ranges.
+    /// Intended for test isolation; the production pipeline calls
+    /// <see cref="BuildAsync"/> exactly once per process.
+    /// </summary>
+    public void Clear() => _ranges.Clear();
+
+    /// <summary>
     /// Builds the exclusion list from files, CIDR strings, and ASN numbers/descriptions.
     /// </summary>
     /// <param name="files">Paths to files containing CIDR entries (one per line, optional trailing #comment).</param>

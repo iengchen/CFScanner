@@ -1,0 +1,49 @@
+using System.Net;
+using CFScanner;
+using CFScanner.Core;
+using CFScanner.Utils;
+using Xunit;
+
+namespace CFScanner.UnitTests;
+
+// Provides a clean global state per-test. Production state is static, so
+// tests must reset it explicitly to avoid order dependence.
+internal static class TestState
+{
+    public static void Reset()
+    {
+        var c = GlobalContext.Config;
+        c.InputFiles.Clear(); c.InputAsns.Clear(); c.InputCidrs.Clear();
+        c.ExcludeFiles.Clear(); c.ExcludeAsns.Clear(); c.ExcludeCidrs.Clear();
+        c.Ports = [Defaults.Port];
+        c.TcpWorkers = Defaults.TcpWorkers;
+        c.SignatureWorkers = Defaults.SignatureWorkers;
+        c.V2RayWorkers = Defaults.V2RayWorkers;
+        c.SpeedTestWorkers = Defaults.SpeedTestWorkers;
+        c.SpeedTestBuffer = Defaults.SpeedTestBuffer;
+        c.TcpChannelBuffer = Defaults.TcpChannelBuffer;
+        c.V2RayChannelBuffer = Defaults.V2RayChannelBuffer;
+        c.TcpTimeoutMs = Defaults.TcpTimeoutMs;
+        c.TlsTimeoutMs = Defaults.TlsTimeoutMs;
+        c.HttpReadTimeoutMs = Defaults.HttpReadTimeoutMs;
+        c.SignatureTotalTimeoutMs = Defaults.SignatureTotalTimeoutMs;
+        c.XrayStartupTimeoutMs = Defaults.XrayStartupTimeoutMs;
+        c.XrayConnectionTimeoutMs = Defaults.XrayConnectionTimeoutMs;
+        c.XrayProcessKillTimeoutMs = Defaults.XrayProcessKillTimeoutMs;
+        c.MinDownloadSpeedKb = Defaults.MinDownloadSpeedKb;
+        c.MinUploadSpeedKb = Defaults.MinUploadSpeedKb;
+        c.SaveLatency = Defaults.SaveLatency;
+        c.Shuffle = Defaults.Shuffle;
+        c.SortResults = Defaults.SortResults;
+        c.RandomSNI = Defaults.RandomSNI;
+        c.V2RayConfigPath = null;
+
+        GlobalContext.OutputFilePath = string.Empty;
+        GlobalContext.TotalIps = 0;
+        GlobalContext.IsInfiniteMode = false;
+        GlobalContext.RawV2RayTemplate = string.Empty;
+        GlobalContext.IpFilter.Clear();
+        GlobalContext.ResetCounters();
+        PauseManager.Reset();
+    }
+}

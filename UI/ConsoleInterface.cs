@@ -244,7 +244,11 @@ public static class ConsoleInterface
                 if (!hasActivity)
                     sb.Append("[Idle - waiting for first workers] ");
 
-                sb.Append($"[Time {TimeSpan.FromSeconds(elapsedSeconds):hh\\:mm\\:ss}] ");
+                TimeSpan ts = TimeSpan.FromSeconds(elapsedSeconds);
+                string timeStr = $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+                sb.Append($"[Time {timeStr}] ");
+
+                //sb.Append($"[Time {TimeSpan.FromSeconds(elapsedSeconds):hh\\:mm\\:ss}] ");
                 sb.Append($"[Prog {progressStr}] ");
 
                 

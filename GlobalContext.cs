@@ -168,4 +168,17 @@ public static class GlobalContext
     /// </summary>
     public static void IncrementSpeedTestPassed() =>
         Interlocked.Increment(ref _speedTestPassed);
+
+    /// <summary>
+    /// Resets all scan counters to zero. Intended for test isolation;
+    /// production callers invoke increments exactly once per scan.
+    /// </summary>
+    public static void ResetCounters()
+    {
+        Interlocked.Exchange(ref _scannedCount, 0);
+        Interlocked.Exchange(ref _tcpOpenTotal, 0);
+        Interlocked.Exchange(ref _signaturePassed, 0);
+        Interlocked.Exchange(ref _v2RayPassed, 0);
+        Interlocked.Exchange(ref _speedTestPassed, 0);
+    }
 }

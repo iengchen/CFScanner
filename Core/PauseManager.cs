@@ -75,4 +75,17 @@ public static class PauseManager
             await Task.Delay(500, ct);
         }
     }
+
+    /// <summary>
+    /// Resets pause state and resumes the global stopwatch if it was frozen.
+    /// Intended for test isolation; production code never calls this.
+    /// </summary>
+    public static void Reset()
+    {
+        if (IsPaused)
+        {
+            IsPaused = false;
+            GlobalContext.Stopwatch.Start();
+        }
+    }
 }

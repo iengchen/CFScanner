@@ -34,38 +34,46 @@ public static class VpnDetector
     /// <returns>True if a VPN is likely active.</returns>
     private static bool IsVpnActive()
     {
-        var interfaces = NetworkInterface.GetAllNetworkInterfaces();
-
-        foreach (var ni in interfaces)
+        try
         {
-            // 1. Basic Filters: Must be UP and NOT Loopback
-            if (ni.OperationalStatus != OperationalStatus.Up) continue;
-            if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+            var interfaces = NetworkInterface.GetAllNetworkInterfaces();
 
-            var name = (ni.Name + " " + ni.Description).ToLowerInvariant();
-
-            // 2. Whitelist Check (Skip VMWare, Hyper-V, etc.)
-            if (Whitelist.Any(w => name.Contains(w))) continue;
-
-            // 3. Keyword Check (Is it a VPN?)
-            bool isSuspicious = VpnKeywords.Any(k => System.Text.RegularExpressions.Regex.IsMatch(name, $@"\b{k}"));
-            if (!isSuspicious) continue;
-
-            // 4. CRITICAL FIX: Check for Assigned IP instead of Gateway
-            // VPN adapters (Tun/Tap/WireGuard) often have no gateway property
-            // but they ALWAYS have an assigned Unicast IP.
-            var ipProps = ni.GetIPProperties();
-
-            // If the interface has any valid Unicast IP (IPv4 or IPv6), it is active.
-            if (ipProps.UnicastAddresses.Any(ua =>
-                !IPAddress.IsLoopback(ua.Address) &&
-                ua.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)) // Optional: Focus on IPv4
+            foreach (var ni in interfaces)
             {
-                return true;
-            }
-        }
+                // 1. Basic Filters: Must be UP and NOT Loopback
+                if (ni.OperationalStatus != OperationalStatus.Up) continue;
+                if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
 
-        return false;
+                var name = (ni.Name + " " + ni.Description).ToLowerInvariant();
+
+                // 2. Whitelist Check (Skip VMWare, Hyper-V, etc.)
+                if (Whitelist.Any(w => name.Contains(w))) continue;
+
+                // 3. Keyword Check (Is it a VPN?)
+                bool isSuspicious = VpnKeywords.Any(k => System.Text.RegularExpressions.Regex.IsMatch(name, $@"\b{k}"));
+                if (!isSuspicious) continue;
+
+                // 4. CRITICAL FIX: Check for Assigned IP instead of Gateway
+                // VPN adapters (Tun/Tap/WireGuard) often have no gateway property
+                // but they ALWAYS have an assigned Unicast IP.
+                var ipProps = ni.GetIPProperties();
+
+                // If the interface has any valid Unicast IP (IPv4 or IPv6), it is active.
+                if (ipProps.UnicastAddresses.Any(ua =>
+                    !IPAddress.IsLoopback(ua.Address) &&
+                    ua.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)) // Optional: Focus on IPv4
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+        
     }
 
     /// <summary>
