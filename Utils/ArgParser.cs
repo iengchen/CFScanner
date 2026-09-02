@@ -157,7 +157,8 @@ public static class ArgParser
             ErrorAndExit("'--new' cannot be combined with '--resume-session'.");
 
         // 5. User Feedback
-        if (!skipConfirmation && !GlobalContext.Config.ResumeOnlyInvocation)
+        if (!skipConfirmation &&
+            (!GlobalContext.Config.ResumeEnabled || GlobalContext.Config.ResumeNewScan))
             DisplayProfileSummary(profile);
 
         return true;
@@ -293,6 +294,11 @@ public static class ArgParser
         DisplayConfigurationSummary("RESUMED SESSION");
     }
 
+    public static void DisplayEffectiveConfigurationSummary()
+    {
+        DisplayConfigurationSummary("EFFECTIVE");
+    }
+
     private static void DisplayProfileSummary(ScanProfile profile) =>
         DisplayConfigurationSummary(profile.ToString().ToUpperInvariant());
 
@@ -377,6 +383,9 @@ public static class ArgParser
 
         Console.ReadKey(true);
         Console.WriteLine();
+        // Start the scan phase on a clean console so target-loading and
+        // live progress messages are not mixed with the configuration table.
+        Console.Clear();
     }
 
     /// <summary>

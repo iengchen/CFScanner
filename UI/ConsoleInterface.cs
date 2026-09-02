@@ -101,6 +101,18 @@ public static class ConsoleInterface
         }
     }
 
+    public static void PrintFinalCheckpointProgress(long totalIps)
+    {
+        if (GlobalContext.IsInfiniteMode || totalIps <= 0)
+            return;
+
+        var ports = Math.Max(1, GlobalContext.Config.Ports.Count);
+        var totalProbes = totalIps * (long)ports;
+        var completed = Math.Clamp(GlobalContext.NextContiguousSequence, 0, totalProbes);
+        var percent = completed * 100.0 / Math.Max(totalProbes, 1);
+        Console.WriteLine($"[Resume] Final checkpoint progress: {percent:F2}% ({completed:N0}/{totalProbes:N0})");
+    }
+
     /// <summary>
     /// Prints a successful verification line (signature or real proxy test).
     /// Ensures the live status line is temporarily cleared and then restored
@@ -239,8 +251,13 @@ public static class ConsoleInterface
             while (!token.IsCancellationRequested)
             {
                 double elapsedSeconds = GlobalContext.Stopwatch.Elapsed.TotalSeconds;
-                long resumedProbes = GlobalContext.IsInfiniteMode ? 0 : Math.Clamp(GlobalContext.ResumeCursor, 0, totalProbes);
-                long completedProbes = resumedProbes + GlobalContext.ScannedCount;
+                // The contiguous sequence cursor already includes all probes
+                // completed before a resume and during the current run.
+                // Do not add the restored Scanned counter again, otherwise
+                // resumed progress is double-counted.
+                long completedProbes = GlobalContext.IsInfiniteMode
+                    ? 0
+                    : Math.Clamp(GlobalContext.NextContiguousSequence, 0, totalProbes);
 
                 // Speed is now "Probes per second" (chk/s)
                 double scanSpeed = GlobalContext.ScannedCount / Math.Max(elapsedSeconds, 1);

@@ -18,12 +18,6 @@ if (GlobalContext.Config.ResumeEnabled && !GlobalContext.Config.ResumeNewScan &&
     GlobalContext.Config.ResumeOnlyInvocation &&
     !await ResumeCoordinator.RestoreConfigurationFromCheckpointAsync())
     return;
-if (GlobalContext.Config.ResumeEnabled && !GlobalContext.Config.ResumeNewScan &&
-    GlobalContext.Config.ResumeOnlyInvocation &&
-    !args.Any(a => a.Equals("-y", StringComparison.OrdinalIgnoreCase) ||
-                   a.Equals("--yes", StringComparison.OrdinalIgnoreCase) ||
-                   a.Equals("--no-confirm", StringComparison.OrdinalIgnoreCase)))
-    ArgParser.DisplayRestoredConfigurationSummary();
 
 // 2. Pre-flight check: warn about VPN/Proxy usage
 // Running the scanner behind a VPN or proxy may cause abuse reports
@@ -64,7 +58,12 @@ if (GlobalContext.Config.ResumeEnabled)
         GlobalContext.Config.InputFiles.Count == 0 &&
         GlobalContext.Config.InputAsns.Count == 0 &&
         GlobalContext.Config.InputCidrs.Count == 0;
-    await ResumeCoordinator.InitializeAsync(args.Any(a => a.Equals("-y", StringComparison.OrdinalIgnoreCase) || a.Equals("--yes", StringComparison.OrdinalIgnoreCase)));
+    var assumeYes = args.Any(a => a.Equals("-y", StringComparison.OrdinalIgnoreCase) ||
+                                  a.Equals("--yes", StringComparison.OrdinalIgnoreCase) ||
+                                  a.Equals("--no-confirm", StringComparison.OrdinalIgnoreCase));
+    await ResumeCoordinator.InitializeAsync(assumeYes);
+    if (!GlobalContext.Config.ResumeNewScan && !assumeYes)
+        ArgParser.DisplayEffectiveConfigurationSummary();
 }
 var (ipSource, totalIps, isInfinite) =
     await InputLoader.LoadTargetsAsync();
@@ -110,6 +109,7 @@ finally
                     totalIps,
                     completed: false,
                     durable: true);
+                ConsoleInterface.PrintFinalCheckpointProgress(totalIps);
             }
         }
         catch (Exception ex) { ConsoleInterface.PrintWarning($"[Resume] Final checkpoint failed: {ex.Message}"); }
