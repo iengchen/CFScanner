@@ -44,6 +44,7 @@ internal static class TestState
         GlobalContext.RawV2RayTemplate = string.Empty;
         GlobalContext.IpFilter.Clear();
         GlobalContext.ResetCounters();
+        GlobalContext.ResetCancellationTokenSource();
         PauseManager.Reset();
     }
 }

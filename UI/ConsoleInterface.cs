@@ -174,7 +174,7 @@ public static class ConsoleInterface
         Task? keyListenerTask = null;
 
         // Task for reading keys (fixes P key lag)
-        if (!Console.IsInputRedirected)
+        if (!Console.IsInputRedirected && !Console.IsOutputRedirected)
         {
             keyListenerTask = Task.Run(async () =>
             {

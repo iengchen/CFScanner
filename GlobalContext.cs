@@ -27,7 +27,9 @@ public static class GlobalContext
     /// cooperative shutdown across all running tasks
     /// (e.g. Ctrl+C or graceful completion).
     /// </summary>
-    public static CancellationTokenSource Cts { get; } = new();
+    private static CancellationTokenSource _cts = new();
+
+    public static CancellationTokenSource Cts => _cts;
 
     /// <summary>
     /// Measures total wall-clock duration of the scan.
@@ -180,5 +182,15 @@ public static class GlobalContext
         Interlocked.Exchange(ref _signaturePassed, 0);
         Interlocked.Exchange(ref _v2RayPassed, 0);
         Interlocked.Exchange(ref _speedTestPassed, 0);
+    }
+
+    /// <summary>
+    /// Replaces the process cancellation source for test isolation.
+    /// Production initializes it once and never calls this method.
+    /// </summary>
+    public static void ResetCancellationTokenSource()
+    {
+        var previous = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+        previous.Dispose();
     }
 }
