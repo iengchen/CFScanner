@@ -157,7 +157,7 @@ public static class ArgParser
             ErrorAndExit("'--new' cannot be combined with '--resume-session'.");
 
         // 5. User Feedback
-        if (!skipConfirmation)
+        if (!skipConfirmation && !GlobalContext.Config.ResumeOnlyInvocation)
             DisplayProfileSummary(profile);
 
         return true;
@@ -288,14 +288,22 @@ public static class ArgParser
     /// Displays a comprehensive summary of the active configuration and waits for user confirmation.
     /// </summary>
     /// <param name="profile">The active scanning profile.</param>
-    private static void DisplayProfileSummary(ScanProfile profile)
+    public static void DisplayRestoredConfigurationSummary()
+    {
+        DisplayConfigurationSummary("RESUMED SESSION");
+    }
+
+    private static void DisplayProfileSummary(ScanProfile profile) =>
+        DisplayConfigurationSummary(profile.ToString().ToUpperInvariant());
+
+    private static void DisplayConfigurationSummary(string profileLabel)
     {
         var config = GlobalContext.Config;
 
         Console.Clear();
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("============================================================");
-        Console.WriteLine($" SCAN CONFIGURATION | PROFILE: {profile.ToString().ToUpper()}");
+        Console.WriteLine($" SCAN CONFIGURATION | PROFILE: {profileLabel}");
         Console.WriteLine("============================================================");
         Console.ResetColor();
         // -----------------------------------------------------------------
