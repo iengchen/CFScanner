@@ -3,8 +3,25 @@ using CFScanner.UI;
 
 namespace CFScanner.Utils;
 
+/// <summary>
+/// Performs pre-flight validation of the scanner environment and user inputs.
+///
+/// Responsibilities:
+/// - Detects active VPN/proxy connections that may cause abuse reports or IP bans.
+/// - Validates existence of input files, exclusion files, and ASN database.
+/// - Optionally downloads the ASN database when required but missing.
+/// - Validates V2Ray/Xray configuration file presence.
+/// </summary>
 public static class AppValidator
 {
+    /// <summary>
+    /// Checks for active VPN or proxy connections and warns the user if detected.
+    /// Displays a confirmation prompt unless output is redirected.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> if scanning should proceed (no VPN/proxy or user confirmed);
+    /// <c>false</c> if the user declined after the warning.
+    /// </returns>
     public static bool CheckVpnRisk()
     {
         if (!VpnDetector.ShouldWarn())
@@ -17,6 +34,17 @@ public static class AppValidator
             requireConfirmation: true);
     }
 
+    /// <summary>
+    /// Validates all user inputs and the execution environment before scanning begins.
+    /// Checks include:
+    /// <list type="bullet">
+    ///   <item>Resume directory writability (when resume is enabled).</item>
+    ///   <item>Existence of all input and exclusion files.</item>
+    ///   <item>V2Ray/Xray configuration file presence (when V2Ray check is enabled).</item>
+    ///   <item>ASN database availability (prompts for download if missing).</item>
+    /// </list>
+    /// </summary>
+    /// <returns><c>true</c> if all validations pass; <c>false</c> if any critical error is found.</returns>
     public static bool ValidateInputs()
     {
         bool hasError = false;

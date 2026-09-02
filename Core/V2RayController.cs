@@ -103,7 +103,11 @@ public static class V2RayController
     /// - If successful and no speed testing is required, saves the result and terminates the process
     /// - Process ownership is tracked via the processOwnershipTransferred flag
     /// </summary>
-    public static async Task TestV2RayConnection(
+    /// <returns>
+    /// <c>true</c> only when a live Xray process was successfully handed off
+    /// to the speed-test stage; otherwise <c>false</c>.
+    /// </returns>
+    public static async Task<bool> TestV2RayConnection(
       string ipAddress,
       int port,
       long signatureLatency,
@@ -118,7 +122,7 @@ public static class V2RayController
         try
         {
             var rootNode = JsonNode.Parse(GlobalContext.RawV2RayTemplate);
-            if (rootNode == null) return;
+            if (rootNode == null) return false;
 
             // -----------------------------------------------------------------
             // Inject local HTTP inbound for testing
@@ -144,18 +148,18 @@ public static class V2RayController
             string finalConfigJson = rootNode.ToJsonString();
 
             xrayProcess = StartXrayProcess(finalConfigJson);
-            if (xrayProcess == null || xrayProcess.HasExited) return;
+            if (xrayProcess == null || xrayProcess.HasExited) return false;
 
             if (!await WaitForLocalPort(
                     localPort,
                     GlobalContext.Config.XrayStartupTimeoutMs))
-                return;
+                return false;
 
             var sw = Stopwatch.StartNew();
             bool works = await TestThroughHttpProxy(localPort);
             sw.Stop();
 
-            if (!works) return;
+            if (!works) return false;
 
             GlobalContext.IncrementV2RayPassed();
             long totalLatency = sw.ElapsedMilliseconds;
@@ -173,6 +177,7 @@ public static class V2RayController
                     ct);
 
                 processOwnershipTransferred = true;
+                return true;
             }
             else
             {
@@ -182,11 +187,13 @@ public static class V2RayController
                     port,
                     totalLatency,
                     "REAL-XRAY");
+                return false;
             }
         }
         catch
         {
             // Errors are handled via cleanup
+            return false;
         }
         finally
         {
@@ -556,6 +563,13 @@ public static class V2RayController
         return false;
     }
 
+    /// <summary>
+    /// Patches the outbound target IP address, port, and optionally randomizes the SNI
+    /// subdomain in the Xray JSON configuration.
+    /// </summary>
+    /// <param name="rootNode">Root JSON node of the Xray configuration.</param>
+    /// <param name="ipAddress">Target IP address to inject.</param>
+    /// <param name="port">Target port number to inject.</param>
     private static void TryPatchOutboundTarget(
     JsonNode rootNode,
     string ipAddress,

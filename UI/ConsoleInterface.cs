@@ -33,6 +33,9 @@ public static class ConsoleInterface
     // Basic Output Helpers
     // ---------------------------------------------------------------------
 
+    /// <summary>
+    /// Prints the application banner and clears the console.
+    /// </summary>
     public static void PrintHeader()
     {
         Console.Clear();
@@ -40,6 +43,10 @@ public static class ConsoleInterface
         Console.WriteLine(new string('-', 60));
     }
 
+    /// <summary>
+    /// Prints an error message in red to the console.
+    /// </summary>
+    /// <param name="msg">Error message to display.</param>
     public static void PrintError(string msg)
     {
         Console.ForegroundColor = ConsoleColor.Red;
@@ -47,6 +54,21 @@ public static class ConsoleInterface
         Console.ResetColor();
     }
 
+    /// <summary>
+    /// Prints a warning message in yellow. Optionally prompts the user
+    /// to confirm continuation.
+    /// </summary>
+    /// <param name="msg">Warning message to display.</param>
+    /// <param name="requireConfirmation">
+    /// When <c>true</c>, prompts the user with a Y/any-key confirmation dialog.
+    /// </param>
+    /// <param name="prependNewLine">
+    /// When <c>true</c>, inserts a blank line before the warning for visual separation.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if no confirmation was required or the user confirmed;
+    /// <c>false</c> if the user declined.
+    /// </returns>
     public static bool PrintWarning(
         string msg,
         bool requireConfirmation = false,
@@ -72,6 +94,11 @@ public static class ConsoleInterface
         return key.Key == ConsoleKey.Y;
     }
 
+    /// <summary>
+    /// Prompts the user to continue, start a new scan, or delete a resumable session.
+    /// </summary>
+    /// <param name="sessionId">Session identifier to display in the prompt.</param>
+    /// <returns>The key pressed by the user (ConsoleKey.C, D, or N).</returns>
     public static ConsoleKeyInfo PromptResume(string sessionId)
     {
         lock (ConsoleLock)
@@ -82,6 +109,13 @@ public static class ConsoleInterface
         }
     }
 
+    /// <summary>
+    /// Prompts the user when an incompatible checkpoint is detected.
+    /// Offers options to start a new scan or delete the saved session.
+    /// </summary>
+    /// <param name="sessionId">Session identifier to display.</param>
+    /// <param name="differences">Description of configuration differences.</param>
+    /// <returns>The key pressed by the user (ConsoleKey.D or N).</returns>
     public static ConsoleKeyInfo PromptIncompatibleResume(string sessionId, string differences)
     {
         lock (ConsoleLock)
@@ -92,6 +126,13 @@ public static class ConsoleInterface
         }
     }
 
+    /// <summary>
+    /// Prints information about a resumed scan session, including the
+    /// starting sequence and results file path.
+    /// </summary>
+    /// <param name="sessionId">Session identifier being resumed.</param>
+    /// <param name="cursor">Starting sequence number for the resumed scan.</param>
+    /// <param name="resultsPath">Path to the results file being appended to.</param>
     public static void PrintResumeContinuation(string sessionId, long cursor, string resultsPath)
     {
         lock (ConsoleLock)
@@ -101,6 +142,10 @@ public static class ConsoleInterface
         }
     }
 
+    /// <summary>
+    /// Prints the final checkpoint progress percentage for finite-mode scans.
+    /// </summary>
+    /// <param name="totalIps">Total number of IPs in the scan.</param>
     public static void PrintFinalCheckpointProgress(long totalIps)
     {
         if (GlobalContext.IsInfiniteMode || totalIps <= 0)
@@ -154,6 +199,11 @@ public static class ConsoleInterface
     // Final Report
     // ---------------------------------------------------------------------
 
+    /// <summary>
+    /// Prints the final scan summary report, including total counts,
+    /// duration, and output file information.
+    /// </summary>
+    /// <param name="totalTime">Total wall-clock duration of the scan.</param>
     public static void PrintFinalReport(TimeSpan totalTime)
     {
         HideStatusLine();
@@ -206,6 +256,15 @@ public static class ConsoleInterface
     // Live Status Line Monitor
     // ---------------------------------------------------------------------
 
+    /// <summary>
+    /// Main UI monitor loop that renders a live status line with scan progress,
+    /// throughput, buffer fill levels, and counters. Also listens for the 'P' key
+    /// to toggle pause/resume.
+    /// </summary>
+    /// <param name="tcpReader">Channel reader for monitoring TCP connection throughput.</param>
+    /// <param name="v2rayReader">Channel reader for monitoring V2Ray verification throughput.</param>
+    /// <param name="speedTestReader">Channel reader for monitoring speed test throughput.</param>
+    /// <param name="token">Cancellation token that stops the monitor loop.</param>
     public static async Task MonitorUi(
       ChannelReader<ScannerWorkers.LiveConnection> tcpReader,
       ChannelReader<ScannerWorkers.SignatureResult>? v2rayReader,
@@ -347,6 +406,10 @@ public static class ConsoleInterface
     // Status Line Control Helpers
     // ---------------------------------------------------------------------
 
+    /// <summary>
+    /// Ensures the status line region is reserved on the console.
+    /// If not yet visible, allocates the current cursor row for status rendering.
+    /// </summary>
     public static void EnsureStatusLine()
     {
         if (Console.IsOutputRedirected) return;
@@ -361,6 +424,9 @@ public static class ConsoleInterface
         }
     }
 
+    /// <summary>
+    /// Hides the live status line by clearing its console row and marking it invisible.
+    /// </summary>
     public static void HideStatusLine()
     {
         if (Console.IsOutputRedirected || !_statusLineVisible)
@@ -373,6 +439,10 @@ public static class ConsoleInterface
         }
     }
 
+    /// <summary>
+    /// Renders the current status line text to the reserved console row.
+    /// No-op if the status line is not visible or output is redirected.
+    /// </summary>
     public static void RenderStatusLine()
     {
         if (Console.IsOutputRedirected || !_statusLineVisible)

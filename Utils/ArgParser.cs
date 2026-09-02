@@ -164,6 +164,12 @@ public static class ArgParser
         return true;
     }
 
+    /// <summary>
+    /// Checks whether any explicit scan-related arguments are present.
+    /// Used to distinguish a configuration-restoring resume from a resuming scan.
+    /// </summary>
+    /// <param name="args">Command-line arguments to check.</param>
+    /// <returns><c>true</c> if at least one scan-related option is found.</returns>
     private static bool HasExplicitScanArguments(string[] args)
     {
         var scanOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -186,6 +192,12 @@ public static class ArgParser
 
     private enum ScanProfile { Normal, Fast, Slow, Extreme }
 
+    /// <summary>
+    /// Detects the scan profile from command-line arguments.
+    /// Returns <see cref="ScanProfile.Normal"/> if no profile flag is found.
+    /// </summary>
+    /// <param name="args">Command-line arguments.</param>
+    /// <returns>The detected <see cref="ScanProfile"/>.</returns>
     private static ScanProfile DetectProfile(string[] args)
     {
         if (args.Any(a => a.Equals("--extreme", StringComparison.OrdinalIgnoreCase))) return ScanProfile.Extreme;
@@ -236,6 +248,11 @@ public static class ArgParser
         return [.. ports.Distinct().OrderBy(p => p)];
     }
 
+    /// <summary>
+    /// Applies the preset concurrency and timeout values for the given scan profile.
+    /// Profile values serve as defaults; explicit CLI arguments override them later.
+    /// </summary>
+    /// <param name="profile">The scan profile to apply.</param>
     private static void ApplyProfileDefaults(ScanProfile profile)
     {
         switch (profile)
@@ -289,11 +306,17 @@ public static class ArgParser
     /// Displays a comprehensive summary of the active configuration and waits for user confirmation.
     /// </summary>
     /// <param name="profile">The active scanning profile.</param>
+    /// <summary>
+    /// Displays the restored configuration summary (used when resuming without explicit arguments).
+    /// </summary>
     public static void DisplayRestoredConfigurationSummary()
     {
         DisplayConfigurationSummary("RESUMED SESSION");
     }
 
+    /// <summary>
+    /// Displays the effective configuration summary after all CLI overrides are applied.
+    /// </summary>
     public static void DisplayEffectiveConfigurationSummary()
     {
         DisplayConfigurationSummary("EFFECTIVE");
@@ -302,6 +325,11 @@ public static class ArgParser
     private static void DisplayProfileSummary(ScanProfile profile) =>
         DisplayConfigurationSummary(profile.ToString().ToUpperInvariant());
 
+    /// <summary>
+    /// Renders the configuration summary table and waits for user confirmation.
+    /// Clears the console before scanning begins to provide a clean status area.
+    /// </summary>
+    /// <param name="profileLabel">Label for the active profile (e.g., "NORMAL", "FAST").</param>
     private static void DisplayConfigurationSummary(string profileLabel)
     {
         var config = GlobalContext.Config;
@@ -418,12 +446,27 @@ public static class ArgParser
     // HELPER METHODS: Validation
     // =========================================================================
 
+    /// <summary>
+    /// Ensures that the given CLI option has a non-null, non-whitespace value.
+    /// Calls <see cref="ErrorAndExit"/> if the value is missing.
+    /// </summary>
+    /// <param name="value">The parsed value from the argument.</param>
+    /// <param name="option">The option name for error messaging.</param>
     private static void RequireValue(string? value, string option)
     {
         if (string.IsNullOrWhiteSpace(value))
             ErrorAndExit($"Option '{option}' requires a value.");
     }
 
+    /// <summary>
+    /// Parses and validates an integer CLI argument within the specified range.
+    /// Calls <see cref="ErrorAndExit"/> on parse failure or out-of-range values.
+    /// </summary>
+    /// <param name="value">The raw string value to parse.</param>
+    /// <param name="option">The option name for error messaging.</param>
+    /// <param name="min">Minimum allowed value (inclusive).</param>
+    /// <param name="max">Maximum allowed value (inclusive).</param>
+    /// <returns>The parsed integer value.</returns>
     private static int ParseInt(string? value, string option, int min, int max)
     {
         RequireValue(value, option);
@@ -466,6 +509,10 @@ public static class ArgParser
         return finalKb;
     }
 
+    /// <summary>
+    /// Prints an error message and terminates the application with exit code 1.
+    /// </summary>
+    /// <param name="message">Error message to display.</param>
     private static void ErrorAndExit(string message)
     {
         ConsoleInterface.PrintError(message);
@@ -476,6 +523,9 @@ public static class ArgParser
     // HELPER METHODS: Help Text
     // =========================================================================
 
+    /// <summary>
+    /// Prints the short help text to the console.
+    /// </summary>
     public static void PrintHelpShort()
     {
         Console.ForegroundColor = ConsoleColor.Cyan;
@@ -508,6 +558,10 @@ EXAMPLE:
 ");
     }
 
+    /// <summary>
+    /// Prints the full documentation (manual) to the console, including
+    /// all options, profiles, examples, and pipeline description.
+    /// </summary>
     public static void PrintHelpFull()
     {
         Console.ForegroundColor = ConsoleColor.Cyan;

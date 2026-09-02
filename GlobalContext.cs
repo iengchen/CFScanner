@@ -30,6 +30,10 @@ public static class GlobalContext
     /// </summary>
     private static CancellationTokenSource _cts = new();
 
+    /// <summary>
+    /// Exposes the global cancellation token source for registering
+    /// cooperative shutdown across all pipeline stages.
+    /// </summary>
     public static CancellationTokenSource Cts => _cts;
 
     /// <summary>
@@ -65,6 +69,7 @@ public static class GlobalContext
     private static readonly object ResumeProgressLock = new();
     private static readonly SortedSet<long> CompletedSequences = [];
     private static long _nextContiguousSequence;
+    /// <summary>Active deterministic random IPv4 generator for infinite-mode scans.</summary>
     public static DeterministicRandomIpv4Generator? ResumeGenerator { get; set; }
 
     // ---------------------------------------------------------------------
@@ -197,6 +202,11 @@ public static class GlobalContext
         }
     }
 
+    /// <summary>
+    /// Restores scan counters from a checkpoint to resume aggregate statistics.
+    /// Values are clamped to valid ranges to prevent overflow.
+    /// </summary>
+    /// <param name="stats">Checkpoint statistics to restore.</param>
     public static void RestoreCounters(CheckpointStats stats)
     {
         Interlocked.Exchange(ref _scannedCount, (int)Math.Clamp(stats.Scanned, 0, int.MaxValue));
@@ -206,10 +216,28 @@ public static class GlobalContext
         Interlocked.Exchange(ref _speedTestPassed, (int)Math.Clamp(stats.SpeedTestPassed, 0, int.MaxValue));
     }
 
+    /// <summary>
+    /// Current contiguous sequence cursor for finite-mode scan resume.
+    /// Updated atomically via <see cref="Interlocked"/> for thread-safe reads.
+    /// </summary>
     public static long ResumeCursor { get => Interlocked.Read(ref _resumeCursor); set => Interlocked.Exchange(ref _resumeCursor, value); }
+    /// <summary>
+    /// Absolute path to the checkpoint file for the current session.
+    /// Set once during <see cref="ResumeCoordinator.InitializeAsync"/>.
+    /// </summary>
     public static string ResumeCheckpointPath { get => _resumeCheckpointPath; set => _resumeCheckpointPath = value; }
+    /// <summary>Random seed used for deterministic IP shuffling in finite mode.</summary>
     public static ulong ResumeShuffleSeed { get => _resumeShuffleSeed; set => _resumeShuffleSeed = value; }
+    /// <summary>
+    /// The next sequence number that is guaranteed to have completed.
+    /// Used by the contiguous-cursor progress tracker for accurate resume.
+    /// </summary>
     public static long NextContiguousSequence => Interlocked.Read(ref _nextContiguousSequence);
+    /// <summary>
+    /// Initializes the resume progress tracker with a starting sequence number.
+    /// Clears the completed-sequence set and resets the contiguous cursor.
+    /// </summary>
+    /// <param name="start">Starting sequence number (typically from checkpoint).</param>
     public static void InitializeResumeProgress(long start)
     {
         lock (ResumeProgressLock)
@@ -218,6 +246,11 @@ public static class GlobalContext
             Interlocked.Exchange(ref _nextContiguousSequence, Math.Max(0, start));
         }
     }
+    /// <summary>
+    /// Marks a specific sequence as completed and advances the contiguous cursor.
+    /// The cursor moves forward past any completed sequences at the head of the range.
+    /// </summary>
+    /// <param name="sequence">Sequence number that completed processing.</param>
     public static void MarkResumeSequenceCompleted(long sequence)
     {
         if (sequence < 0) return;

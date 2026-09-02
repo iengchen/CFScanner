@@ -226,14 +226,14 @@ public static class ScannerWorkers
                         break;
                     await PauseManager.WaitIfPausedAsync(ct);
 
-                            await V2RayController.TestV2RayConnection(
+                    var handedOffToSpeedTest = await V2RayController.TestV2RayConnection(
                                 item.Ip.ToString(),
                                 item.Port,
                                 item.SignatureLatency,
                                 speedTestWriter,
                                 ct,
                                 item.Sequence);
-                    if (speedTestWriter is null && !ct.IsCancellationRequested)
+                    if (!handedOffToSpeedTest && !ct.IsCancellationRequested)
                     {
                         GlobalContext.MarkResumeSequenceCompleted(item.Sequence);
                     }
@@ -288,6 +288,17 @@ public static class ScannerWorkers
     // Signature Detection Logic
     // ---------------------------------------------------------------------
 
+    /// <summary>
+    /// Performs the core TLS handshake and HTTP signature check on a TCP connection.
+    /// Sends an HTTP HEAD request over TLS 1.2/1.3 and validates the response
+    /// for Cloudflare-specific headers (server: cloudflare, cf-ray).
+    /// </summary>
+    /// <param name="client">Connected <see cref="TcpClient"/> to validate.</param>
+    /// <param name="parentToken">Parent cancellation token for the pipeline stage.</param>
+    /// <returns>
+    /// A tuple of (<see cref="bool"/> success, <see cref="long"/> latency in milliseconds).
+    /// Returns (<c>false</c>, <c>-1</c>) on failure.
+    /// </returns>
     private static async Task<(bool Success, long Latency)> CheckSignatureLogic(
         TcpClient client,
         CancellationToken parentToken)
@@ -365,6 +376,12 @@ public static class ScannerWorkers
         }
     }
 
+    /// <summary>
+    /// Checks whether an HTTP response header string contains valid Cloudflare
+    /// signature markers: HTTP 200 status, <c>server: cloudflare</c>, and <c>cf-ray</c>.
+    /// </summary>
+    /// <param name="headers">Raw HTTP response header string.</param>
+    /// <returns><c>true</c> if all Cloudflare markers are present; otherwise <c>false</c>.</returns>
     private static bool IsCloudflareResponse(string headers)
     {
         if (string.IsNullOrWhiteSpace(headers))

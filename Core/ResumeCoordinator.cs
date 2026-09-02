@@ -3,13 +3,45 @@ using System.Diagnostics;
 
 namespace CFScanner.Core;
 
+/// <summary>
+/// Coordinates scan session persistence, resume logic, and checkpoint lifecycle.
+///
+/// Responsibilities:
+/// - Manages file-based locking to prevent concurrent scanner instances from
+///   corrupting the same checkpoint session.
+/// - Restores configuration from a previously saved checkpoint (--resume-session).
+/// - Initializes the checkpoint store, detects compatible/incompatible sessions,
+///   and prompts the user for continue/new/delete decisions.
+/// - Periodically saves checkpoint state with atomic writes (coalesced via <see cref="SaveGate"/>).
+/// - Validates result file compatibility (length, timestamps) before resume.
+///
+/// This type is static because it owns process-wide singleton resources
+/// (the file lock and the current checkpoint).
+/// </summary>
 public static class ResumeCoordinator
 {
+    /// <summary>Exclusive file lock stream preventing concurrent scanner instances.</summary>
     private static FileStream? _lock;
+    /// <summary>Path to the <c>.lock</c> file associated with the active checkpoint.</summary>
     private static string? _lockPath;
+    /// <summary>Semaphore gating concurrent saves to prevent checkpoint corruption.</summary>
     private static readonly SemaphoreSlim SaveGate = new(1, 1);
+    /// <summary>
+    /// The currently active checkpoint for this scan session, or <c>null</c>
+    /// before <see cref="InitializeAsync"/> completes.
+    /// </summary>
     public static ScanCheckpoint? Current { get; private set; }
 
+    /// <summary>
+    /// Restores the global configuration from a saved checkpoint session.
+    /// Used when <c>--resume</c> is invoked without explicit scan arguments,
+    /// allowing the previous session's configuration to be reapplied.
+    /// </summary>
+    /// <param name="token">Cancellation token for the async operation.</param>
+    /// <returns>
+    /// <c>true</c> if configuration was successfully restored;
+    /// <c>false</c> if no compatible checkpoint was found or an error occurred.
+    /// </returns>
     public static async Task<bool> RestoreConfigurationFromCheckpointAsync(CancellationToken token = default)
     {
         var config = GlobalContext.Config;
@@ -44,6 +76,17 @@ public static class ResumeCoordinator
         return true;
     }
 
+    /// <summary>
+    /// Initializes the resume subsystem: creates the checkpoint directory,
+    /// detects compatible sessions, prompts the user for action, and acquires
+    /// the file lock. Must be called before any scan work begins when resume
+    /// is enabled.
+    /// </summary>
+    /// <param name="assumeYes">
+    /// When <c>true</c>, automatically continues a matching checkpoint
+    /// without interactive prompts (equivalent to <c>-y</c>).
+    /// </param>
+    /// <param name="token">Cancellation token for the async operation.</param>
     public static async Task InitializeAsync(bool assumeYes, CancellationToken token = default)
     {
         if (!GlobalContext.Config.ResumeEnabled) return;
@@ -140,7 +183,10 @@ public static class ResumeCoordinator
         _lockPath = lockPath;
         try
         {
-            _lock = new FileStream(lockPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            // FileMode.CreateNew prevents another scanner from creating the
+            // same lock. The contender uses a compatible read-only handle to
+            // inspect the PID while this process still owns the lock.
+            _lock = new FileStream(lockPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
             await using var writer = new StreamWriter(_lock, leaveOpen: true);
             await writer.WriteAsync(Environment.ProcessId.ToString());
             await writer.FlushAsync();
@@ -150,7 +196,7 @@ public static class ResumeCoordinator
             bool stale = false;
             try
             {
-                var pidText = await File.ReadAllTextAsync(lockPath, token);
+                var pidText = await ReadLockPidAsync(lockPath, token);
                 stale = !int.TryParse(pidText, out var pid) || !IsProcessRunning(pid);
             }
             catch { stale = true; }
@@ -160,10 +206,26 @@ public static class ResumeCoordinator
                 throw;
             }
             try { File.Delete(lockPath); } catch { throw; }
-            _lock = new FileStream(lockPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            _lock = new FileStream(lockPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            await using var writer = new StreamWriter(_lock, leaveOpen: true);
+            await writer.WriteAsync(Environment.ProcessId.ToString());
+            await writer.FlushAsync();
         }
     }
 
+    /// <summary>
+    /// Persists the current checkpoint state to disk using atomic writes.
+    /// Coalesced via <see cref="SaveGate"/> to prevent concurrent serialization.
+    /// Called periodically during the scan and once at finalization.
+    /// </summary>
+    /// <param name="total">Total number of IPs in the scan (finite mode).</param>
+    /// <param name="completed">
+    /// <c>true</c> if the scan finished successfully; <c>false</c> for in-progress or interrupted saves.
+    /// </param>
+    /// <param name="token">Cancellation token for the async operation.</param>
+    /// <param name="durable">
+    /// When <c>true</c>, flushes the file stream to disk for crash-resilience.
+    /// </param>
     public static async Task SaveAsync(long total, bool completed, CancellationToken token = default, bool durable = false)
     {
         if (!GlobalContext.Config.ResumeEnabled || Current is null) return;
@@ -264,12 +326,20 @@ public static class ResumeCoordinator
         c.XrayProcessKillTimeoutMs = s.XrayProcessKillTimeoutMs;
     }
 
+    /// <summary>
+    /// Removes the checkpoint file and its backup if the current session completed successfully.
+    /// Called after final results are written to avoid leaving stale checkpoints.
+    /// </summary>
     public static void RemoveCompletedCheckpoint()
     {
         if (Current is not null && Current.Completed)
             ScanCheckpointStore.Delete(GlobalContext.ResumeCheckpointPath);
     }
 
+    /// <summary>
+    /// Releases the file lock and deletes the lock file.
+    /// Must be called during cleanup (both normal and abnormal exit paths).
+    /// </summary>
     public static void Dispose()
     {
         _lock?.Dispose();
@@ -287,6 +357,30 @@ public static class ResumeCoordinator
         catch { return false; }
     }
 
+    private static async Task<string> ReadLockPidAsync(string lockPath, CancellationToken token)
+    {
+        await using var stream = new FileStream(
+            lockPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite,
+            bufferSize: 256,
+            options: FileOptions.Asynchronous);
+        using var reader = new StreamReader(stream);
+        return await reader.ReadToEndAsync(token);
+    }
+
+    /// <summary>
+    /// Determines whether the result file on disk is still compatible with
+    /// the checkpoint. A scan can be interrupted before its first successful
+    /// result, in which case final cleanup may remove the empty file; it is
+    /// still safe to resume because the append path recreates it.
+    /// </summary>
+    /// <param name="checkpoint">The checkpoint to validate against.</param>
+    /// <returns>
+    /// <c>true</c> if the result file is compatible and safe to append to;
+    /// <c>false</c> if the file has been truncated, overwritten, or tampered with.
+    /// </returns>
     public static bool IsResultsFileCompatible(ScanCheckpoint checkpoint)
     {
         // A scan can be interrupted before its first successful result. In

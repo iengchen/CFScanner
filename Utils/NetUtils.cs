@@ -11,6 +11,13 @@ namespace CFScanner.Utils;
 public static class NetUtils
 {
   
+    /// <summary>
+    /// Expands a CIDR notation string or single IPv4 address into an enumerable of IP addresses.
+    /// Expansion is capped at <see cref="Defaults.CidrExpandCap"/> addresses to prevent
+    /// excessive memory usage. A warning is printed when the cap is exceeded.
+    /// </summary>
+    /// <param name="input">A CIDR string (e.g., "104.16.0.0/24") or a single IPv4 address.</param>
+    /// <returns>Enumerable of <see cref="IPAddress"/> objects within the range.</returns>
     public static IEnumerable<IPAddress> ExpandCidr(string input)
     {
         // ---------------------------------------------------------------------
@@ -99,6 +106,13 @@ public static class NetUtils
         }
     }
 
+    /// <summary>
+    /// Generates an infinite sequence of random public IPv4 addresses from a
+    /// caller-provided deterministic generator, skipping private/reserved ranges
+    /// and addresses excluded via the global IP filter.
+    /// </summary>
+    /// <param name="generator">Pre-seeded deterministic random IPv4 generator.</param>
+    /// <returns>Enumerable of random public <see cref="IPAddress"/> objects.</returns>
     public static IEnumerable<IPAddress> GenerateRandomIps(DeterministicRandomIpv4Generator generator)
     {
         while (true)
@@ -106,6 +120,12 @@ public static class NetUtils
     }
 
 
+    /// <summary>
+    /// Converts an <see cref="IPAddress"/> to its <see cref="uint"/> representation.
+    /// Only supports IPv4 addresses.
+    /// </summary>
+    /// <param name="ip">The IPv4 address to convert.</param>
+    /// <returns>Unsigned 32-bit integer representation of the address.</returns>
     public static uint IpToUint(IPAddress ip)
     {
         Span<byte> b = stackalloc byte[4];
@@ -114,13 +134,23 @@ public static class NetUtils
         return ((uint)b[0] << 24) | ((uint)b[1] << 16) | ((uint)b[2] << 8) | b[3];
     }
 
+    /// <summary>
+    /// Converts a <see cref="uint"/> back to an <see cref="IPAddress"/>.
+    /// </summary>
+    /// <param name="v">Unsigned 32-bit integer representation of an IPv4 address.</param>
+    /// <returns>The corresponding <see cref="IPAddress"/>.</returns>
     public static IPAddress UintToIp(uint v)
     {
         Span<byte> b = [(byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v];
         return new IPAddress(b);
     }
 
-    // Fisher-Yates روی uint[]  (نه IPAddress)
+    /// <summary>
+    /// Shuffles the first <paramref name="count"/> elements of a <see cref="uint"/> array
+    /// in-place using the Fisher-Yates algorithm with the shared random generator.
+    /// </summary>
+    /// <param name="arr">Array to shuffle.</param>
+    /// <param name="count">Number of elements to shuffle (from the beginning).</param>
     public static void Shuffle(uint[] arr, int count)
     {
         var rng = Random.Shared;
@@ -131,6 +161,14 @@ public static class NetUtils
         }
     }
 
+    /// <summary>
+    /// Shuffles the first <paramref name="count"/> elements of a <see cref="uint"/> array
+    /// in-place using the Fisher-Yates algorithm with a deterministic random generator.
+    /// Used for reproducible resume of shuffled finite-mode scans.
+    /// </summary>
+    /// <param name="arr">Array to shuffle.</param>
+    /// <param name="count">Number of elements to shuffle (from the beginning).</param>
+    /// <param name="seed">Seed for the deterministic random generator.</param>
     public static void Shuffle(uint[] arr, int count, ulong seed)
     {
         var rng = new DeterministicRandomIpv4Generator(seed);

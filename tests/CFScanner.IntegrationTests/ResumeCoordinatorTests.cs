@@ -97,4 +97,38 @@ public sealed class ResumeCoordinatorTests
             Directory.Delete(dir, true);
         }
     }
+
+    [Fact, Trait("Category", "Integration")]
+    public async Task LockFile_PidCanBeReadWhileSessionIsOwned()
+    {
+        TestState.Reset();
+        var dir = Path.Combine(Path.GetTempPath(), $"cfscanner-resume-lock-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            GlobalContext.Config.ResumeEnabled = true;
+            GlobalContext.Config.ResumeDirectory = dir;
+            GlobalContext.Config.InputCidrs.Add("192.0.2.1/32");
+            GlobalContext.OutputFilePath = Path.Combine(dir, "results.txt");
+            GlobalContext.IsInfiniteMode = false;
+
+            await ResumeCoordinator.InitializeAsync(assumeYes: true);
+
+            var lockPath = GlobalContext.ResumeCheckpointPath + ".lock";
+            await using var lockReader = new FileStream(
+                lockPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite);
+            using var reader = new StreamReader(lockReader);
+            var pidText = await reader.ReadToEndAsync();
+
+            Assert.Equal(Environment.ProcessId.ToString(), pidText);
+        }
+        finally
+        {
+            ResumeCoordinator.Dispose();
+            Directory.Delete(dir, true);
+        }
+    }
 }
