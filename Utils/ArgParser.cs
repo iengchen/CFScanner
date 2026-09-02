@@ -104,6 +104,23 @@ public static class ArgParser
                 case "-nl": case "--no-latency": GlobalContext.Config.SaveLatency = false; break;
                 case "-s": case "--shuffle": GlobalContext.Config.Shuffle = true; break;
                 case "--random-sni": GlobalContext.Config.RandomSNI = true; break;
+                case "--resume": case "--checkpoint": GlobalContext.Config.ResumeEnabled = true; break;
+                case "--resume-interval":
+                    GlobalContext.Config.ResumeIntervalSeconds = ParseInt(value, option, 10, 86400); i++; break;
+                case "--resume-dir":
+                    RequireValue(value, option);
+                    GlobalContext.Config.ResumeDirectory = value!.Trim();
+                    i++;
+                    break;
+                case "--resume-session":
+                    RequireValue(value, option);
+                    GlobalContext.Config.ResumeEnabled = true;
+                    GlobalContext.Config.ResumeSessionId = value!.Trim();
+                    i++;
+                    break;
+                case "--new":
+                    GlobalContext.Config.ResumeNewScan = true;
+                    break;
 
                 // --- Profiles (Already handled in pre-scan, skip here) ---
                 case "--fast": case "--slow": case "--extreme": case "--normal": break;
@@ -132,11 +149,34 @@ public static class ArgParser
         if (!speedBufferExplicitlySet)
             GlobalContext.Config.SpeedTestBuffer = GlobalContext.Config.SpeedTestWorkers + 1;
 
+        GlobalContext.Config.ResumeOnlyInvocation =
+            GlobalContext.Config.ResumeEnabled && !HasExplicitScanArguments(args);
+        if (GlobalContext.Config.ResumeNewScan && !GlobalContext.Config.ResumeEnabled)
+            ErrorAndExit("'--new' requires '--resume'.");
+        if (GlobalContext.Config.ResumeNewScan && !string.IsNullOrWhiteSpace(GlobalContext.Config.ResumeSessionId))
+            ErrorAndExit("'--new' cannot be combined with '--resume-session'.");
+
         // 5. User Feedback
         if (!skipConfirmation)
             DisplayProfileSummary(profile);
 
         return true;
+    }
+
+    private static bool HasExplicitScanArguments(string[] args)
+    {
+        var scanOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "-f","--file","-a","--asn","-r","--range",
+            "-xf","--exclude-file","-xa","--exclude-asn","-xr","--exclude-range",
+            "-p","--port","-vc","--v2ray-config","--speed-dl","--speed-ul",
+            "--speed-workers","--speed-buffer","--tcp-workers","--signature-workers",
+            "--v2ray-workers","--tcp-buffer","--v2ray-buffer","--tcp-timeout",
+            "--tls-timeout","--http-timeout","--sign-timeout","--xray-start-timeout",
+            "--xray-conn-timeout","--xray-kill-timeout","--sort","-nl","--no-latency",
+            "-s","--shuffle","--random-sni","--fast","--slow","--extreme","--normal"
+        };
+        return args.Any(a => scanOptions.Contains(a));
     }
 
     // =========================================================================
@@ -439,6 +479,11 @@ OPTIONS:
   --speed-dl     Min download speed (e.g., 2mb, 500kb)
   --speed-ul     Min upload speed (e.g., 1mb)
   --sort         Sort results by latency
+  --resume       Save and recover interrupted scans (default: disabled)
+  --resume-session <ID>  Select a specific saved session (with --resume)
+  --new                  Start a new resumable session and ignore saved sessions
+  --resume-interval <SEC>  Checkpoint interval (10–86400, default: 60)
+  --resume-dir <PATH>      Checkpoint directory (default: resume)
   --manual       Show full documentation
 
 EXAMPLE:
@@ -550,6 +595,23 @@ OUTPUT & BEHAVIOR
   -nl, --no-latency              Do not store latency values in result file
   -s,  --shuffle                 Randomize IP scan order
   -y,  --yes                     Skip configuration summary and start scanning immediately
+
+RESUME / CRASH RECOVERY
+-----------------------
+  --resume                       Opt in to resumable scans
+  --resume-session <ID>          Select a specific saved session
+  --new                          Start a new resumable session; ignore saved sessions
+  --resume-interval <SECONDS>    Atomic checkpoint interval (10–86400; default 60)
+  --resume-dir <PATH>            Checkpoint directory (default: ./resume)
+  Checkpoints are small JSON files. Finite scans resume from a conservative
+  cursor and may repeat a short tail after interruption; infinite scans use
+  a deterministic generator. Existing sessions are never continued silently.
+  Interactive startup choices: [C] continue, [N] new scan, [D] delete.
+  With -y, continuation requires matching configuration and result file.
+  Running only --resume restores the saved scan configuration automatically.
+  Checkpoints are atomic and written at most once per interval; credentials
+  and raw Xray templates are never stored. Infinite sessions remain recoverable
+  after cancellation. The default 60-second cadence minimizes SSD writes.
 
 HELP
 ----

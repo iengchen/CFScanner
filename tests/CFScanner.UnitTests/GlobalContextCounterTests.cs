@@ -1,4 +1,5 @@
 using CFScanner;
+using CFScanner.Core;
 using Xunit;
 
 namespace CFScanner.UnitTests;
@@ -79,6 +80,26 @@ public sealed class GlobalContextCounterTests
         Assert.Equal(0, GlobalContext.SignaturePassed);
         Assert.Equal(0, GlobalContext.V2RayPassed);
         Assert.Equal(0, GlobalContext.SpeedTestPassed);
+    }
+
+    [Fact, Trait("Category", "Unit")]
+    public void RestoreCounters_LoadsCheckpointStatistics()
+    {
+        TestState.Reset();
+        GlobalContext.RestoreCounters(new CheckpointStats
+        {
+            Scanned = 42,
+            TcpOpen = 11,
+            SignaturePassed = 7,
+            V2RayPassed = 3,
+            SpeedTestPassed = 2
+        });
+
+        Assert.Equal(42, GlobalContext.ScannedCount);
+        Assert.Equal(11, GlobalContext.TcpOpenTotal);
+        Assert.Equal(7, GlobalContext.SignaturePassed);
+        Assert.Equal(3, GlobalContext.V2RayPassed);
+        Assert.Equal(2, GlobalContext.SpeedTestPassed);
     }
 
     [Fact, Trait("Category", "Unit")]

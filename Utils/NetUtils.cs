@@ -1,5 +1,6 @@
 ﻿using CFScanner.UI;
 using System.Buffers.Binary;
+using CFScanner.Core;
 using System.Net;
 
 namespace CFScanner.Utils;
@@ -90,26 +91,18 @@ public static class NetUtils
     /// <returns>Enumerable of random IPAddress objects.</returns>
     public static IEnumerable<IPAddress> GenerateRandomIps()
     {
-        var rng = Random.Shared;
-        byte[] buf = new byte[4];
+        var generator = new DeterministicRandomIpv4Generator(
+            (ulong)Random.Shared.NextInt64());
         while (true)
         {
-            rng.NextBytes(buf);
-
-            // Skip non‑public addresses:
-            //   0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12, multicast/class E etc.
-            if (buf[0] == 0 || buf[0] == 10 || buf[0] == 127 ||
-                (buf[0] == 192 && buf[1] == 168) ||
-                (buf[0] == 172 && buf[1] >= 16 && buf[1] <= 31) ||
-                buf[0] >= 224)
-                continue;
-
-            uint ipVal = BinaryPrimitives.ReadUInt32BigEndian(buf);
-            if (GlobalContext.IpFilter.IsBlocked(ipVal))
-                continue;
-
-            yield return new IPAddress(buf);
+            yield return UintToIp(generator.NextPublic(GlobalContext.IpFilter));
         }
+    }
+
+    public static IEnumerable<IPAddress> GenerateRandomIps(DeterministicRandomIpv4Generator generator)
+    {
+        while (true)
+            yield return UintToIp(generator.NextPublic(GlobalContext.IpFilter));
     }
 
 
@@ -134,6 +127,16 @@ public static class NetUtils
         for (int i = count - 1; i > 0; i--)
         {
             int j = rng.Next(i + 1);
+            (arr[i], arr[j]) = (arr[j], arr[i]);
+        }
+    }
+
+    public static void Shuffle(uint[] arr, int count, ulong seed)
+    {
+        var rng = new DeterministicRandomIpv4Generator(seed);
+        for (int i = count - 1; i > 0; i--)
+        {
+            int j = (int)(rng.NextUInt32() % (uint)(i + 1));
             (arr[i], arr[j]) = (arr[j], arr[i]);
         }
     }

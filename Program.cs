@@ -14,6 +14,11 @@ using CFScanner.Utils;
 if (!ArgParser.ParseArguments(args))
     return;
 
+if (GlobalContext.Config.ResumeEnabled && !GlobalContext.Config.ResumeNewScan &&
+    GlobalContext.Config.ResumeOnlyInvocation &&
+    !await ResumeCoordinator.RestoreConfigurationFromCheckpointAsync())
+    return;
+
 // 2. Pre-flight check: warn about VPN/Proxy usage
 // Running the scanner behind a VPN or proxy may cause abuse reports
 // or unreliable results.
@@ -44,6 +49,17 @@ ConsoleInterface.PrintHeader();
 // 6. Load exclusions and scan targets
 // Builds exclusion filters first, then resolves input sources.
 await InputLoader.BuildExclusionsAsync();
+if (GlobalContext.Config.ResumeEnabled)
+{
+    // InputLoader's documented fallback is infinite mode only when no
+    // explicit finite source was supplied; establish that identity before
+    // selecting a checkpoint.
+    GlobalContext.IsInfiniteMode =
+        GlobalContext.Config.InputFiles.Count == 0 &&
+        GlobalContext.Config.InputAsns.Count == 0 &&
+        GlobalContext.Config.InputCidrs.Count == 0;
+    await ResumeCoordinator.InitializeAsync(args.Any(a => a.Equals("-y", StringComparison.OrdinalIgnoreCase) || a.Equals("--yes", StringComparison.OrdinalIgnoreCase)));
+}
 var (ipSource, totalIps, isInfinite) =
     await InputLoader.LoadTargetsAsync();
 
@@ -57,16 +73,50 @@ if (totalIps == 0 && !isInfinite)
 {
     ConsoleInterface.PrintError(
         "No IPs found to scan (check inputs or exclusions).");
+    if (GlobalContext.Config.ResumeEnabled) ResumeCoordinator.Dispose();
     return;
 }
 
 // 8. Run the scanning engine
 // This call blocks until the scan completes or is cancelled.
-await ScanEngine.RunScanAsync(ipSource);
+bool finalCheckpointSaved = false;
+try
+{
+    await ScanEngine.RunScanAsync(ipSource);
+    FileUtils.SortResultsFile();
+    var completed = !isInfinite &&
+        GlobalContext.NextContiguousSequence >= totalIps * Math.Max(1, GlobalContext.Config.Ports.Count);
+    if (GlobalContext.Config.ResumeEnabled)
+    {
+        await ResumeCoordinator.SaveAsync(totalIps, completed, durable: true);
+        finalCheckpointSaved = true;
+    }
+}
+finally
+{
+    if (GlobalContext.Config.ResumeEnabled)
+    {
+        try
+        {
+            if (!finalCheckpointSaved)
+            {
+                await ResumeCoordinator.SaveAsync(
+                    totalIps,
+                    completed: false,
+                    durable: true);
+            }
+        }
+        catch (Exception ex) { ConsoleInterface.PrintWarning($"[Resume] Final checkpoint failed: {ex.Message}"); }
+        finally { ResumeCoordinator.Dispose(); }
+    }
+}
 
 // 9. Finalize results and print summary
 // Optionally sorts output and prints final statistics.
-FileUtils.SortResultsFile();
+if (GlobalContext.Config.ResumeEnabled &&
+    !isInfinite &&
+    GlobalContext.NextContiguousSequence >= totalIps * Math.Max(1, GlobalContext.Config.Ports.Count))
+    ResumeCoordinator.RemoveCompletedCheckpoint();
 ConsoleInterface.PrintFinalReport(
     GlobalContext.Stopwatch.Elapsed);
 

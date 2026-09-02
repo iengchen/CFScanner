@@ -108,7 +108,8 @@ public static class V2RayController
       int port,
       long signatureLatency,
       ChannelWriter<ScannerWorkers.SpeedTestRequest>? speedTestWriter,
-      CancellationToken ct)
+      CancellationToken ct,
+      long sequence = -1)
     {
         int localPort = GetFreeTcpPort();
         Process? xrayProcess = null;
@@ -167,7 +168,8 @@ public static class V2RayController
                         port,
                         totalLatency,
                         xrayProcess,
-                        localPort),
+                        localPort,
+                        sequence),
                     ct);
 
                 processOwnershipTransferred = true;

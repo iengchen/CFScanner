@@ -69,7 +69,36 @@ public static class ConsoleInterface
         var key = Console.ReadKey(intercept: true);
         Console.WriteLine();
 
-        return char.ToUpperInvariant(key.KeyChar) == 'Y';
+        return key.Key == ConsoleKey.Y;
+    }
+
+    public static ConsoleKeyInfo PromptResume(string sessionId)
+    {
+        lock (ConsoleLock)
+        {
+            Console.WriteLine($"[Resume] Recoverable session found: {sessionId}");
+            Console.Write("[Resume] [C] Continue  [N] New scan  [D] Delete: ");
+            return Console.ReadKey(true);
+        }
+    }
+
+    public static ConsoleKeyInfo PromptIncompatibleResume(string sessionId, string differences)
+    {
+        lock (ConsoleLock)
+        {
+            Console.WriteLine($"[Resume] Checkpoint {sessionId} is incompatible: {differences}");
+            Console.Write("[Resume] [N] New scan  [D] Delete saved session: ");
+            return Console.ReadKey(true);
+        }
+    }
+
+    public static void PrintResumeContinuation(string sessionId, long cursor, string resultsPath)
+    {
+        lock (ConsoleLock)
+        {
+            Console.WriteLine($"[Resume] Continuing session {sessionId} from sequence {cursor:N0}.");
+            Console.WriteLine($"[Resume] Appending to results: {resultsPath}");
+        }
     }
 
     /// <summary>
@@ -210,6 +239,8 @@ public static class ConsoleInterface
             while (!token.IsCancellationRequested)
             {
                 double elapsedSeconds = GlobalContext.Stopwatch.Elapsed.TotalSeconds;
+                long resumedProbes = GlobalContext.IsInfiniteMode ? 0 : Math.Clamp(GlobalContext.ResumeCursor, 0, totalProbes);
+                long completedProbes = resumedProbes + GlobalContext.ScannedCount;
 
                 // Speed is now "Probes per second" (chk/s)
                 double scanSpeed = GlobalContext.ScannedCount / Math.Max(elapsedSeconds, 1);
@@ -222,8 +253,8 @@ public static class ConsoleInterface
                 else
                 {
                     // Percentage based on Total Probes (IPs * Ports)
-                    double percent = GlobalContext.ScannedCount * 100.0 / Math.Max(totalProbes, 1);
-                    progressStr = $"{percent:F2}% ({GlobalContext.ScannedCount:N0}/{totalProbes:N0})";
+                double percent = completedProbes * 100.0 / Math.Max(totalProbes, 1);
+                progressStr = $"{percent:F2}% ({completedProbes:N0}/{totalProbes:N0})";
                 }
 
                 int tcpBuf = (int)(tcpReader.Count * 100.0 / Math.Max(GlobalContext.Config.TcpChannelBuffer, 1));

@@ -21,6 +21,23 @@ public static class AppValidator
     {
         bool hasError = false;
 
+        if (GlobalContext.Config.ResumeEnabled)
+        {
+            try
+            {
+                var resumeDir = Path.GetFullPath(GlobalContext.Config.ResumeDirectory);
+                Directory.CreateDirectory(resumeDir);
+                var probe = Path.Combine(resumeDir, $".write-test-{Guid.NewGuid():N}");
+                using (File.Create(probe)) { }
+                File.Delete(probe);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                ConsoleInterface.PrintError($"Resume directory is not writable: {GlobalContext.Config.ResumeDirectory}");
+                hasError = true;
+            }
+        }
+
         // -----------------------------------------------------------------
         // Input and exclusion file validation
         // -----------------------------------------------------------------

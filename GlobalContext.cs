@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using CFScanner.Core;
 using CFScanner.Utils;
 
 namespace CFScanner;
@@ -58,6 +59,13 @@ public static class GlobalContext
     // Scan mode flags and shared immutable resources
     private static bool _isInfiniteMode;
     private static string _rawV2RayTemplate = string.Empty;
+    private static long _resumeCursor;
+    private static string _resumeCheckpointPath = string.Empty;
+    private static ulong _resumeShuffleSeed;
+    private static readonly object ResumeProgressLock = new();
+    private static readonly SortedSet<long> CompletedSequences = [];
+    private static long _nextContiguousSequence;
+    public static DeterministicRandomIpv4Generator? ResumeGenerator { get; set; }
 
     // ---------------------------------------------------------------------
     // Public Read-Only State Accessors
@@ -182,6 +190,44 @@ public static class GlobalContext
         Interlocked.Exchange(ref _signaturePassed, 0);
         Interlocked.Exchange(ref _v2RayPassed, 0);
         Interlocked.Exchange(ref _speedTestPassed, 0);
+        lock (ResumeProgressLock)
+        {
+            CompletedSequences.Clear();
+            Interlocked.Exchange(ref _nextContiguousSequence, 0);
+        }
+    }
+
+    public static void RestoreCounters(CheckpointStats stats)
+    {
+        Interlocked.Exchange(ref _scannedCount, (int)Math.Clamp(stats.Scanned, 0, int.MaxValue));
+        Interlocked.Exchange(ref _tcpOpenTotal, Math.Max(0, stats.TcpOpen));
+        Interlocked.Exchange(ref _signaturePassed, (int)Math.Clamp(stats.SignaturePassed, 0, int.MaxValue));
+        Interlocked.Exchange(ref _v2RayPassed, (int)Math.Clamp(stats.V2RayPassed, 0, int.MaxValue));
+        Interlocked.Exchange(ref _speedTestPassed, (int)Math.Clamp(stats.SpeedTestPassed, 0, int.MaxValue));
+    }
+
+    public static long ResumeCursor { get => Interlocked.Read(ref _resumeCursor); set => Interlocked.Exchange(ref _resumeCursor, value); }
+    public static string ResumeCheckpointPath { get => _resumeCheckpointPath; set => _resumeCheckpointPath = value; }
+    public static ulong ResumeShuffleSeed { get => _resumeShuffleSeed; set => _resumeShuffleSeed = value; }
+    public static long NextContiguousSequence => Interlocked.Read(ref _nextContiguousSequence);
+    public static void InitializeResumeProgress(long start)
+    {
+        lock (ResumeProgressLock)
+        {
+            CompletedSequences.Clear();
+            Interlocked.Exchange(ref _nextContiguousSequence, Math.Max(0, start));
+        }
+    }
+    public static void MarkResumeSequenceCompleted(long sequence)
+    {
+        if (sequence < 0) return;
+        lock (ResumeProgressLock)
+        {
+            if (sequence < _nextContiguousSequence) return;
+            CompletedSequences.Add(sequence);
+            while (CompletedSequences.Remove(_nextContiguousSequence))
+                Interlocked.Increment(ref _nextContiguousSequence);
+        }
     }
 
     /// <summary>

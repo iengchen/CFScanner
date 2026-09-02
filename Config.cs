@@ -22,6 +22,9 @@ public static class Defaults
     public const bool Shuffle = false;
     public const bool SortResults = false;
     public const bool SaveLatency = true;
+    public const bool ResumeEnabled = false;
+    public const int ResumeIntervalSeconds = 60;
+    public const string ResumeDirectory = "resume";
 
     // ---------------------------------------------------------------------
     // Xray / V2Ray
@@ -118,6 +121,12 @@ public class Config
     public bool Shuffle { get; set; } = Defaults.Shuffle;
     public bool SortResults { get; set; } = Defaults.SortResults;
     public bool SaveLatency { get; set; } = Defaults.SaveLatency;
+    public bool ResumeEnabled { get; set; } = Defaults.ResumeEnabled;
+    public int ResumeIntervalSeconds { get; set; } = Defaults.ResumeIntervalSeconds;
+    public string ResumeDirectory { get; set; } = Defaults.ResumeDirectory;
+    public string? ResumeSessionId { get; set; }
+    public bool ResumeOnlyInvocation { get; set; }
+    public bool ResumeNewScan { get; set; }
 
     // ---------------------------------------------------------------------
     // Concurrency & Buffering

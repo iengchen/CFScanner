@@ -36,6 +36,27 @@ public static class ScanEngine
         Console.WriteLine("[Info] Press P to pause/resume");
         Console.WriteLine(new string('-', 60));
         GlobalContext.Stopwatch.Start();
+        Task? checkpointTask = null;
+        if (GlobalContext.Config.ResumeEnabled)
+        {
+            checkpointTask = Task.Run(async () =>
+            {
+                try
+                {
+                    using var timer = new PeriodicTimer(
+                        TimeSpan.FromSeconds(GlobalContext.Config.ResumeIntervalSeconds));
+                    while (await timer.WaitForNextTickAsync(GlobalContext.Cts.Token))
+                        await ResumeCoordinator.SaveAsync(
+                            GlobalContext.TotalIps, false, GlobalContext.Cts.Token);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    ConsoleInterface.PrintWarning(
+                        $"[Resume] Checkpoint unavailable: {ex.Message}");
+                }
+            });
+        }
 
         // ---------------------------------------------------------------------
         // 1. Channel Initialization (Backpressure & Flow Control)
@@ -139,10 +160,12 @@ public static class ScanEngine
         // ---------------------------------------------------------------------
         try
         {
-            var ipPortSource =
-                from ip in ipSource
-                from port in GlobalContext.Config.Ports
-                select (ip, port);
+            var ports = GlobalContext.Config.Ports;
+            var sequenceOffset = GlobalContext.ResumeCursor / Math.Max(1, ports.Count) *
+                Math.Max(1, ports.Count);
+            var ipPortSource = ipSource
+                .SelectMany((ip, ipIndex) => ports.Select((port, portIndex) =>
+                    (ip, port, sequence: sequenceOffset + (long)ipIndex * ports.Count + portIndex)));
 
             await Parallel.ForEachAsync(
                 ipPortSource,
@@ -160,7 +183,8 @@ public static class ScanEngine
                         item.ip,
                         item.port,
                         tcpChannel.Writer,
-                        ct);
+                        ct,
+                        item.sequence);
                 });
         }
         catch (OperationCanceledException)
@@ -171,34 +195,41 @@ public static class ScanEngine
         // ---------------------------------------------------------------------
         // 7. Graceful Shutdown (Cascading Channel Completion)
         // ---------------------------------------------------------------------
-        if (!GlobalContext.Cts.IsCancellationRequested)
+        // Complete each channel and await every worker even after cancellation.
+        // This guarantees no pipeline/Xray task outlives ScanEngine shutdown.
+        tcpChannel.Writer.TryComplete();
+        await AwaitWorkersAsync(signatureTasks);
+
+        if (v2rayChannel != null)
         {
-            // Signal Stage 2: no more TCP results
-            tcpChannel.Writer.Complete();
-            await Task.WhenAll(signatureTasks);
-
-            // Signal Stage 3: no more signature results
-            if (v2rayChannel != null)
-            {
-                v2rayChannel.Writer.Complete();
-                await Task.WhenAll(v2rayTasks);
-            }
-
-            // Signal Stage 4: no more verified endpoints
-            if (speedTestChannel != null)
-            {
-                speedTestChannel.Writer.Complete();
-                await Task.WhenAll(speedTestTasks);
-            }
-
-            // Explicitly terminate UI monitoring after normal completion
-            GlobalContext.Cts.Cancel();
+            v2rayChannel.Writer.TryComplete();
+            await AwaitWorkersAsync(v2rayTasks);
         }
+
+        if (speedTestChannel != null)
+        {
+            speedTestChannel.Writer.TryComplete();
+            await AwaitWorkersAsync(speedTestTasks);
+        }
+
+        // Explicitly terminate UI monitoring after normal completion.
+        if (!GlobalContext.Cts.IsCancellationRequested)
+            GlobalContext.Cts.Cancel();
 
         // Ensure UI task exits cleanly
         try { await monitorTask; } catch { }
+        if (checkpointTask is not null)
+        {
+            try { await checkpointTask; } catch (OperationCanceledException) { }
+        }
 
         ConsoleInterface.HideStatusLine();
         GlobalContext.Stopwatch.Stop();
+    }
+
+    private static async Task AwaitWorkersAsync(IEnumerable<Task> workers)
+    {
+        try { await Task.WhenAll(workers); }
+        catch (OperationCanceledException) { }
     }
 }

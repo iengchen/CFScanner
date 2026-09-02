@@ -25,4 +25,20 @@ public sealed class InputLoaderTests
         }
         finally { File.Delete(path); }
     }
+
+    [Fact, Trait("Category", "Integration")]
+    public async Task FiniteLoader_ResumesFromContiguousCursor()
+    {
+        TestState.Reset();
+        GlobalContext.Config.InputCidrs.Add("192.0.2.1/30");
+        GlobalContext.Config.ResumeEnabled = true;
+        GlobalContext.ResumeCursor = 2;
+        GlobalContext.ResumeShuffleSeed = 123;
+
+        var result = await InputLoader.LoadTargetsAsync();
+
+        Assert.False(result.IsInfinite);
+        Assert.Equal(new[] { "192.0.2.3", "192.0.2.4" },
+            result.Source.Select(x => x.ToString()));
+    }
 }

@@ -187,11 +187,15 @@ public static class InputLoader
             if (GlobalContext.Config.Shuffle)
             {
                 Console.WriteLine("[Info] Shuffling IPs...");
-                NetUtils.Shuffle(arr, count);
+                if (GlobalContext.Config.ResumeEnabled)
+                    NetUtils.Shuffle(arr, count, GlobalContext.ResumeShuffleSeed);
+                else
+                    NetUtils.Shuffle(arr, count);
             }
 
             // Lazily materialize IPAddress objects one at a time
-            return (StreamIps(arr, count), count, false);
+            var ports = Math.Max(1, GlobalContext.Config.Ports.Count);
+            return (StreamIps(arr, count, GlobalContext.ResumeCursor / ports), count, false);
         }
 
         // -------------------------------------------------------------
@@ -204,14 +208,19 @@ public static class InputLoader
             ConsoleInterface.PrintWarning("No exclusions set! Scanning ALL internet.");
         }
 
-        return (NetUtils.GenerateRandomIps(), -1, true);
+        if (GlobalContext.Config.ResumeEnabled && GlobalContext.ResumeGenerator is null)
+            GlobalContext.ResumeGenerator = new DeterministicRandomIpv4Generator(
+                (ulong)Random.Shared.NextInt64());
+        return (GlobalContext.ResumeGenerator is { } generator
+            ? NetUtils.GenerateRandomIps(generator)
+            : NetUtils.GenerateRandomIps(), -1, true);
     }
 
     // Converts uint -> IPAddress on demand so only one object
     // lives in memory at any given moment during scanning.
-    private static IEnumerable<IPAddress> StreamIps(uint[] arr, int count)
+    private static IEnumerable<IPAddress> StreamIps(uint[] arr, int count, long start = 0)
     {
-        for (int i = 0; i < count; i++)
+        for (long i = Math.Clamp(start, 0, count); i < count; i++)
             yield return NetUtils.UintToIp(arr[i]);
     }
 

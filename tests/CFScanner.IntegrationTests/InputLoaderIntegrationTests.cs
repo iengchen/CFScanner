@@ -99,4 +99,49 @@ public sealed class InputLoaderIntegrationTests
         }
         finally { File.Delete(path); }
     }
+
+    [Fact, Trait("Category", "Integration")]
+    public void InfiniteGenerator_RestoresNextValueAcrossSessionState()
+    {
+        TestState.Reset();
+        var filter = new IpFilter();
+        var first = new DeterministicRandomIpv4Generator(9876);
+        _ = first.NextPublic(filter);
+        var snapshot = first.Snapshot();
+        var restored = new DeterministicRandomIpv4Generator(
+            snapshot.Seed, snapshot.State, snapshot.ValuesConsumed, snapshot.Rejections);
+
+        Assert.Equal(first.NextPublic(filter), restored.NextPublic(filter));
+    }
+
+    [Fact, Trait("Category", "Integration")]
+    public async Task CheckpointPublication_IsRecoverableAfterPrimaryCorruption()
+    {
+        TestState.Reset();
+        var dir = Path.Combine(Path.GetTempPath(), $"cfscanner-checkpoint-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var resultPath = Path.Combine(dir, "results.txt");
+            await File.WriteAllTextAsync(resultPath, "192.0.2.1\n");
+            var checkpointPath = Path.Combine(dir, "session.json");
+            var checkpoint = new ScanCheckpoint
+            {
+                Mode = "finite",
+                ConfigFingerprint = "integration",
+                ResultsPath = resultPath,
+                ResultSessionId = "session",
+                Finite = new FiniteCheckpointState { SequenceLength = 2, NextContiguousSequence = 1 }
+            };
+            await ScanCheckpointStore.WriteAsync(checkpointPath, checkpoint, durable: true);
+            checkpoint.Finite!.NextContiguousSequence = 2;
+            await ScanCheckpointStore.WriteAsync(checkpointPath, checkpoint, durable: true);
+            await File.WriteAllTextAsync(checkpointPath, "{");
+
+            var loaded = await ScanCheckpointStore.ReadValidAsync(checkpointPath);
+            Assert.NotNull(loaded);
+            Assert.Equal(1, loaded!.Finite!.NextContiguousSequence);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 }

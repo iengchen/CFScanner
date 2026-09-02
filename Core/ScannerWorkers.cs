@@ -35,12 +35,12 @@ public static class ScannerWorkers
     /// Represents an IP address with an already established TCP connection.
     /// Ownership of the TcpClient is transferred between pipeline stages.
     /// </summary>
-    public record LiveConnection(IPAddress Ip, int Port, TcpClient Client);
+    public record LiveConnection(IPAddress Ip, int Port, TcpClient Client, long Sequence = -1);
 
     /// <summary>
     /// Represents an IP that passed TLS + HTTP signature detection.
     /// </summary>
-    public record SignatureResult(IPAddress Ip, int Port, long SignatureLatency);
+    public record SignatureResult(IPAddress Ip, int Port, long SignatureLatency, long Sequence = -1);
 
     /// <summary>
     /// Represents an IP whose Xray process has already passed
@@ -53,7 +53,8 @@ public static class ScannerWorkers
         int Port,
         long PingLatency,
         Process XrayProcess,
-        int LocalPort
+        int LocalPort,
+        long Sequence = -1
     );
 
     // ---------------------------------------------------------------------
@@ -68,7 +69,8 @@ public static class ScannerWorkers
       IPAddress ip,
       int port,
       ChannelWriter<LiveConnection> writer,
-      CancellationToken ct)
+      CancellationToken ct,
+      long sequence = -1)
     {
         if (ct.IsCancellationRequested)
             return;
@@ -91,7 +93,7 @@ public static class ScannerWorkers
             if (client.Connected)
             {
                 GlobalContext.IncrementTcpOpenTotal();
-                await writer.WriteAsync(new LiveConnection(ip, port, client), ct);
+                await writer.WriteAsync(new LiveConnection(ip, port, client, sequence), ct);
                 handedOver = true;
             }
         }
@@ -104,6 +106,7 @@ public static class ScannerWorkers
             if (!handedOver)
             {
                 GlobalContext.IncrementScannedCount();
+                GlobalContext.MarkResumeSequenceCompleted(sequence);
                 client.Dispose();
             }
         }
@@ -137,6 +140,7 @@ public static class ScannerWorkers
                     await PauseManager.WaitIfPausedAsync(ct);
 
                     bool success = false;
+                    bool forwardedToV2Ray = false;
                     long latency = -1;
 
                     // Primary attempt
@@ -178,8 +182,9 @@ public static class ScannerWorkers
                         if (GlobalContext.Config.EnableV2RayCheck && v2rayWriter != null)
                         {
                             await v2rayWriter.WriteAsync(
-                                new SignatureResult(item.Ip, item.Port, latency),
+                                new SignatureResult(item.Ip, item.Port, latency, item.Sequence),
                                 ct);
+                            forwardedToV2Ray = true;
                         }
                         else
                         {
@@ -189,6 +194,8 @@ public static class ScannerWorkers
                     }
 
                     GlobalContext.IncrementScannedCount();
+                    if (!forwardedToV2Ray)
+                        GlobalContext.MarkResumeSequenceCompleted(item.Sequence);
                 }
             }
         }
@@ -219,12 +226,17 @@ public static class ScannerWorkers
                         break;
                     await PauseManager.WaitIfPausedAsync(ct);
 
-                    await V2RayController.TestV2RayConnection(
-                        item.Ip.ToString(),
-                        item.Port,
-                        item.SignatureLatency,
-                        speedTestWriter,
-                        ct);
+                            await V2RayController.TestV2RayConnection(
+                                item.Ip.ToString(),
+                                item.Port,
+                                item.SignatureLatency,
+                                speedTestWriter,
+                                ct,
+                                item.Sequence);
+                    if (speedTestWriter is null && !ct.IsCancellationRequested)
+                    {
+                        GlobalContext.MarkResumeSequenceCompleted(item.Sequence);
+                    }
                 }
             }
         }
@@ -262,6 +274,10 @@ public static class ScannerWorkers
                         item.XrayProcess,
                         item.LocalPort,
                         ct);
+                    if (!ct.IsCancellationRequested)
+                    {
+                        GlobalContext.MarkResumeSequenceCompleted(item.Sequence);
+                    }
                 }
             }
         }

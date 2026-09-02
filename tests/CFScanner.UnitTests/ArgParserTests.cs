@@ -22,6 +22,34 @@ public sealed class ArgParserTests
     }
 
     [Fact, Trait("Category", "Unit")]
+    public void Parse_Resume_UsesOptInAndBounds()
+    {
+        Assert.True(Parse(["--resume", "--resume-interval", "120", "--resume-dir", "checkpoint-data", "-r", "192.0.2.1", "-y"]));
+        Assert.True(GlobalContext.Config.ResumeEnabled);
+        Assert.Equal(120, GlobalContext.Config.ResumeIntervalSeconds);
+        Assert.Equal("checkpoint-data", GlobalContext.Config.ResumeDirectory);
+        Assert.False(GlobalContext.Config.ResumeOnlyInvocation);
+    }
+
+    [Fact, Trait("Category", "Unit")]
+    public void Parse_ResumeOnly_RestoresIntentAndSessionId()
+    {
+        Assert.True(Parse(["--resume-session", "abc123", "-y"]));
+        Assert.True(GlobalContext.Config.ResumeEnabled);
+        Assert.True(GlobalContext.Config.ResumeOnlyInvocation);
+        Assert.Equal("abc123", GlobalContext.Config.ResumeSessionId);
+    }
+
+    [Fact, Trait("Category", "Unit")]
+    public void Parse_ResumeNew_StartsFreshResumableSession()
+    {
+        Assert.True(Parse(["--resume", "--new", "-y"]));
+        Assert.True(GlobalContext.Config.ResumeEnabled);
+        Assert.True(GlobalContext.Config.ResumeNewScan);
+        Assert.True(GlobalContext.Config.ResumeOnlyInvocation);
+    }
+
+    [Fact, Trait("Category", "Unit")]
     public void Parse_FastProfile_SetsAggressiveValues()
     {
         Assert.True(Parse(["--fast", "-r", "192.0.2.1", "-y"]));

@@ -36,11 +36,21 @@ internal static class TestState
         c.Shuffle = Defaults.Shuffle;
         c.SortResults = Defaults.SortResults;
         c.RandomSNI = Defaults.RandomSNI;
+        c.ResumeEnabled = Defaults.ResumeEnabled;
+        c.ResumeIntervalSeconds = Defaults.ResumeIntervalSeconds;
+        c.ResumeDirectory = Defaults.ResumeDirectory;
+        c.ResumeSessionId = null;
+        c.ResumeOnlyInvocation = false;
+        c.ResumeNewScan = false;
         c.V2RayConfigPath = null;
 
         GlobalContext.OutputFilePath = string.Empty;
         GlobalContext.TotalIps = 0;
         GlobalContext.IsInfiniteMode = false;
+        GlobalContext.ResumeCursor = 0;
+        GlobalContext.ResumeShuffleSeed = 0;
+        GlobalContext.ResumeGenerator = null;
+        GlobalContext.ResumeCheckpointPath = string.Empty;
         GlobalContext.RawV2RayTemplate = string.Empty;
         GlobalContext.IpFilter.Clear();
         GlobalContext.ResetCounters();

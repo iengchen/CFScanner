@@ -34,6 +34,10 @@ IPs are actually functional and capable of passing traffic.
 -   **Latency Testing:** Measures TCP/Handshake latency, optionally validates **download/upload speed** and sorts
     results.
 
+The scanner accepts file, ASN, and CIDR/IP inputs in combination. If no input
+source is provided, it runs in infinite mode and generates random public IPv4
+addresses. CIDR expansion is capped at 65,536 addresses.
+
 ------------------------------------------------------------------------
 
 ## ⚙️ Prerequisites & Dependencies (Source Build Only)
@@ -76,6 +80,12 @@ The tool uses the IP-to-ASN database to resolve ASN numbers and organizations wh
 
 > ℹ️ If you are using the prebuilt releases, the ASN database is already included and no action is required.
 
+### Build from source
+
+```powershell
+dotnet build CFScanner.sln
+dotnet run --project CFScanner.csproj -- --help
+```
 
 ------------------------------------------------------------------------
 
@@ -256,9 +266,9 @@ cfscanner --asn cloudflare --v2ray-config config.json
 
 | Option                    | Description                                   |
 |---------------------------|-----------------------------------------------|
-| `-xa, --exclude-asn`      | Exclude specific ASNs or Organizations.       |
-| `-xf, --exclude-file`     | Exclude IPs/CIDRs listed in a file.           |
-| `-xr, --exclude-range`    | Exclude inline IPs or CIDRs.                  |
+| `-xa, --exclude-asn <LIST>` | Exclude specific ASNs or organizations. |
+| `-xf, --exclude-file <LIST>` | Exclude IPs/CIDRs listed in files. |
+| `-xr, --exclude-range <LIST>` | Exclude inline IPs or CIDRs. |
 
 ### ⚡ Performance & Tuning Options
 
@@ -269,8 +279,10 @@ cfscanner --asn cloudflare --v2ray-config config.json
 | `--v2ray-workers <N>`      | Number of concurrent V2Ray workers (range: 1-500).                          |
 | `--tcp-buffer <N>`         | TCP channel buffer size (range: 1-50000).                                   |
 | `--v2ray-buffer <N>`       | V2Ray channel buffer size (range: 1-10000). Buffers auto-scale based on worker counts if not explicitly set. |
-| `--speed-dl <N>`           | Minimum required download speed per IP (e.g. 50kb, 1mb). Enables download speed testing. |
-| `--speed-ul <N>`           | Minimum required upload speed per IP (e.g. 50kb, 1mb). Enables upload speed testing. |
+| `--speed-workers <N>`      | Concurrent speed-test workers (range: 1-50). |
+| `--speed-buffer <N>`       | Speed-test queue buffer (range: 1-100). |
+| `--speed-dl <N>`           | Minimum download speed (e.g. `50kb`, `1mb`). Requires `-vc`. |
+| `--speed-ul <N>`           | Minimum upload speed (e.g. `50kb`, `1mb`). Requires `-vc`. |
 > ℹ️ Do not set high values for `--speed-dl` and  `--speed-ul`. Prefer upload-only testing with low thresholds (e.g. ~20kb); high limits with many concurrent workers can saturate NIC bandwidth and cause false negatives.
 
 ### ⏱️ Timeout Options (Milliseconds)
@@ -292,6 +304,7 @@ cfscanner --asn cloudflare --v2ray-config config.json
 | `--sort`                   | Sort the final results file by latency (lowest to highest).                |
 | `-nl, --no-latency`        | Do not save latency timing in the output file.                             |
 | `-s, --shuffle`            | Shuffle the input IP list before scanning.                                 |
+| `--random-sni`             | Randomize the first SNI label (requires a wildcard certificate).            |
 
 ### 🎯 Profile Presets
 
@@ -302,6 +315,9 @@ cfscanner --asn cloudflare --v2ray-config config.json
 | `--slow`                   | Stable/conservative profile for unreliable networks. TCP: 50 workers, Sig: 20, V2Ray: 4. |
 | `--extreme`                | Datacenter-grade profile with maximum concurrency. TCP: 200 workers, Sig: 80, V2Ray: 32. |
 
+Explicit worker and timeout options override profile values. Buffer sizes are
+auto-scaled from worker counts unless a buffer option is supplied.
+
 ### 🛠️ Other Options
 
 | Option                     | Description                                                                 |
@@ -309,18 +325,30 @@ cfscanner --asn cloudflare --v2ray-config config.json
 | `-h, --help`               | Display a short help message.                                              |
 | `--help full`              | Display the full help message with detailed descriptions.                  |
 | `-y, --yes, --no-confirm`  | Skip confirmation prompt and start scanning immediately.                   |
-| `--random-sni`             | Randomizes the first SNI label when serverName is a subdomain (wildcard TLS certificate required). |
-| `-p, --port <LIST>`        | Target ports to scan.                      |
+| `-p, --port <LIST>`        | HTTPS ports: `443`, `2053`, `2083`, `2087`, `2096`, `8443`, or `all`. |
 
-------------------------------------------------------------------------
+### ♻️ Resume and crash recovery
 
-## ⚠️ Disclaimer
+| Option | Description |
+|--------|-------------|
+| `--resume` / `--checkpoint` | Enable periodic checkpoints and recovery. |
+| `--new` | With `--resume`, start a new session and ignore saved sessions. |
+| `--resume-session <ID>` | Select a specific saved session; implies `--resume`. |
+| `--resume-interval <SEC>` | Checkpoint interval (10–86400 seconds; default: 60). |
+| `--resume-dir <PATH>` | Checkpoint directory (default: `./resume`). |
 
-This tool is created for educational and research purposes only.\
-The author is not responsible for any misuse of this tool or any legal
-consequences arising from its use.\
-Please ensure you comply with all local laws and regulations regarding
-network scanning.
+With only `cfscanner --resume`, the latest recoverable session's scan
+configuration is restored automatically. Use `--resume-session <ID>` when more
+than one session exists. At startup, `C` continues, `N` starts a new scan, and
+`D` deletes the saved session. `-y` continues only when configuration and the
+results file match exactly. A finite scan may repeat a short tail after an
+interruption; infinite scans restore a deterministic generator state.
+Checkpoints never store credentials or raw Xray templates.
+
+Use `cfscanner --resume --new` to start a fresh resumable scan without
+consulting or deleting previous checkpoints. `--new` cannot be combined with
+`--resume-session`.
+
 ## Testing
 
 The solution includes xUnit v3 test projects under `tests/` for unit,
@@ -336,3 +364,13 @@ dotnet test CFScanner.sln --coverage
 
 End-to-end tests are skipped unless `CFSCANNER_RUN_E2E=1` is set. Real Xray
 coverage is opt-in via `CFSCANNER_RUN_XRAY_TESTS=1`.
+
+------------------------------------------------------------------------
+
+## ⚠️ Disclaimer
+
+This tool is created for educational and research purposes only.\
+The author is not responsible for any misuse of this tool or any legal
+consequences arising from its use.\
+Please ensure you comply with all local laws and regulations regarding
+network scanning.
