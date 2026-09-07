@@ -152,7 +152,8 @@ public static class V2RayController
 
             if (!await WaitForLocalPort(
                     localPort,
-                    GlobalContext.Config.XrayStartupTimeoutMs))
+                    GlobalContext.Config.XrayStartupTimeoutMs,
+                    ct))
                 return false;
 
             var sw = Stopwatch.StartNew();
@@ -204,8 +205,12 @@ public static class V2RayController
                     if (!xrayProcess.HasExited)
                     {
                         xrayProcess.Kill();
-                        xrayProcess.WaitForExit(
-                            GlobalContext.Config.XrayProcessKillTimeoutMs);
+                        try
+                        {
+                            await xrayProcess.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromMilliseconds(GlobalContext.Config.XrayProcessKillTimeoutMs), ct);
+                        }
+                        catch (OperationCanceledException) { }
+                        catch (TimeoutException) { }
                     }
                 }
                 catch { }
@@ -303,7 +308,12 @@ public static class V2RayController
                     try
                     {
                         xrayProcess.Kill();
-                        xrayProcess.WaitForExit(GlobalContext.Config.XrayProcessKillTimeoutMs);
+                        try
+                        {
+                            await xrayProcess.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromMilliseconds(GlobalContext.Config.XrayProcessKillTimeoutMs), ct);
+                        }
+                        catch (OperationCanceledException) { }
+                        catch (TimeoutException) { }
                     }
                     catch { }
                 }
@@ -495,8 +505,9 @@ public static class V2RayController
 
             return process;
         }
-        catch
+        catch (Exception ex)
         {
+            ConsoleInterface.PrintError($"Failed to start Xray process: {ex.Message}");
             return null;
         }
     }
@@ -545,7 +556,7 @@ public static class V2RayController
     /// <param name="port">Port number to monitor</param>
     /// <param name="timeoutMs">Maximum wait time in milliseconds</param>
     /// <returns>True if port becomes available within timeout; otherwise false</returns>
-    private static async Task<bool> WaitForLocalPort(int port, int timeoutMs)
+    private static async Task<bool> WaitForLocalPort(int port, int timeoutMs, CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
@@ -554,11 +565,16 @@ public static class V2RayController
             {
                 using var client = new TcpClient();
                 var connectTask = client.ConnectAsync("127.0.0.1", port);
-                if (await Task.WhenAny(connectTask, Task.Delay(50)) == connectTask && client.Connected)
+                if (await Task.WhenAny(connectTask, Task.Delay(50, ct)) == connectTask && client.Connected)
                     return true;
             }
+            catch (OperationCanceledException) { return false; }
             catch { }
-            await Task.Delay(50);
+            try
+            {
+                await Task.Delay(50, ct);
+            }
+            catch (OperationCanceledException) { return false; }
         }
         return false;
     }

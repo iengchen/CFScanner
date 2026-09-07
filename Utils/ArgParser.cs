@@ -16,6 +16,8 @@ public static class ArgParser
     /// <returns>True if scanning should proceed; False if help/manual was requested.</returns>
     public static bool ParseArguments(string[] args)
     {
+        try
+        {
         // 1. Check for Help/Manual requests immediately (Early Exit)
         if (ShouldShowHelp(args)) return false;
         var skipConfirmation = false;
@@ -162,6 +164,11 @@ public static class ArgParser
             DisplayProfileSummary(profile);
 
         return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -516,7 +523,7 @@ public static class ArgParser
     private static void ErrorAndExit(string message)
     {
         ConsoleInterface.PrintError(message);
-        Environment.Exit(1);
+        throw new InvalidOperationException(message);
     }
 
     // =========================================================================

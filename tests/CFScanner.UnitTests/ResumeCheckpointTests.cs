@@ -93,16 +93,16 @@ public sealed class ResumeCheckpointTests
     }
 
     [Fact, Trait("Category", "Unit")]
-    public void Checkpoint_StoresAsnDatabaseIdentity()
+    public async Task Checkpoint_StoresAsnDatabaseIdentity()
     {
         var path = Path.GetTempFileName();
         try
         {
             File.WriteAllText(path, "asn database");
-            var identity = ScanConfigurationFingerprint.GetFileIdentity(path);
+            var identity = await ScanConfigurationFingerprint.GetFileIdentity(path);
             Assert.Contains(Path.GetFullPath(path), identity);
             Assert.NotEqual(path, identity);
-            Assert.Equal(identity, ScanConfigurationFingerprint.GetFileIdentity(path));
+            Assert.Equal(identity, await ScanConfigurationFingerprint.GetFileIdentity(path));
         }
         finally { File.Delete(path); }
     }
@@ -126,17 +126,17 @@ public sealed class ResumeCheckpointTests
     }
 
     [Fact, Trait("Category", "Unit")]
-    public void Fingerprint_DistinguishesInputAndExclusionSourcesAndMode()
+    public async Task Fingerprint_DistinguishesInputAndExclusionSourcesAndMode()
     {
         var input = Path.GetTempFileName();
         var exclude = Path.GetTempFileName();
         try
         {
             var config = new Config { InputFiles = [input], ExcludeFiles = [exclude] };
-            var finite = ScanConfigurationFingerprint.Compute(config, false);
+            var finite = await ScanConfigurationFingerprint.Compute(config, false);
             var swapped = new Config { InputFiles = [exclude], ExcludeFiles = [input] };
-            var swappedFingerprint = ScanConfigurationFingerprint.Compute(swapped, false);
-            var infinite = ScanConfigurationFingerprint.Compute(config, true);
+            var swappedFingerprint = await ScanConfigurationFingerprint.Compute(swapped, false);
+            var infinite = await ScanConfigurationFingerprint.Compute(config, true);
 
             Assert.NotEqual(finite, swappedFingerprint);
             Assert.NotEqual(finite, infinite);
@@ -149,13 +149,13 @@ public sealed class ResumeCheckpointTests
     }
 
     [Fact, Trait("Category", "Unit")]
-    public void Fingerprint_PreservesOrderedPorts()
+    public async Task Fingerprint_PreservesOrderedPorts()
     {
         var first = new Config { Ports = [443, 8443] };
         var second = new Config { Ports = [8443, 443] };
         Assert.NotEqual(
-            ScanConfigurationFingerprint.Compute(first, true),
-            ScanConfigurationFingerprint.Compute(second, true));
+            await ScanConfigurationFingerprint.Compute(first, true),
+            await ScanConfigurationFingerprint.Compute(second, true));
     }
 
     [Fact, Trait("Category", "Unit")]

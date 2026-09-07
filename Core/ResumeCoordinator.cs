@@ -99,7 +99,7 @@ public static class ResumeCoordinator
             var cp = await ScanCheckpointStore.ReadValidAsync(file, token);
             if (cp is not null && !cp.Completed) existing.Add(cp);
         }
-        var fingerprint = ScanConfigurationFingerprint.Compute(GlobalContext.Config, GlobalContext.IsInfiniteMode);
+        var fingerprint = await ScanConfigurationFingerprint.Compute(GlobalContext.Config, GlobalContext.IsInfiniteMode);
         var candidate = GlobalContext.Config.ResumeNewScan ? null : existing.OrderByDescending(x => x.UpdatedUtc).FirstOrDefault(x =>
             (string.IsNullOrWhiteSpace(GlobalContext.Config.ResumeSessionId) ||
              string.Equals(x.SessionId, GlobalContext.Config.ResumeSessionId, StringComparison.OrdinalIgnoreCase)) &&
@@ -128,7 +128,7 @@ public static class ResumeCoordinator
         }
         else if (incompatible is not null)
         {
-            var differences = ScanConfigurationFingerprint.DescribeDifferences(
+            var differences = await ScanConfigurationFingerprint.DescribeDifferences(
                 GlobalContext.Config, incompatible, GlobalContext.IsInfiniteMode);
             var detail = differences.Count == 0 ? "fingerprint or result file identity" : string.Join(", ", differences);
             if (!assumeYes && !Console.IsInputRedirected)
@@ -232,7 +232,7 @@ public static class ResumeCoordinator
         await SaveGate.WaitAsync(token);
         try
         {
-        Current.ConfigFingerprint = ScanConfigurationFingerprint.Compute(GlobalContext.Config, GlobalContext.IsInfiniteMode);
+        Current.ConfigFingerprint = await ScanConfigurationFingerprint.Compute(GlobalContext.Config, GlobalContext.IsInfiniteMode);
         Current.ResultsPath = GlobalContext.OutputFilePath;
         if (File.Exists(Current.ResultsPath))
         {
@@ -249,7 +249,7 @@ public static class ResumeCoordinator
         Current.ExcludeAsns = [.. GlobalContext.Config.ExcludeAsns];
         Current.ExcludeRanges = [.. GlobalContext.Config.ExcludeCidrs];
         Current.ConfigSnapshot = CaptureSnapshot(GlobalContext.Config);
-        Current.AsnDatabaseIdentity = ScanConfigurationFingerprint.GetFileIdentity(GlobalContext.Config.AsnDbPath);
+        Current.AsnDatabaseIdentity = await ScanConfigurationFingerprint.GetFileIdentity(GlobalContext.Config.AsnDbPath);
         Current.Completed = completed;
         Current.Mode = GlobalContext.IsInfiniteMode ? "infinite" : "finite";
         if (GlobalContext.IsInfiniteMode && GlobalContext.ResumeGenerator is { } generator)

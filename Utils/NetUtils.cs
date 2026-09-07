@@ -174,7 +174,14 @@ public static class NetUtils
         var rng = new DeterministicRandomIpv4Generator(seed);
         for (int i = count - 1; i > 0; i--)
         {
-            int j = (int)(rng.NextUInt32() % (uint)(i + 1));
+            uint limit = (uint)(i + 1);
+            uint threshold = uint.MaxValue - (uint.MaxValue % limit);
+            uint r;
+            do
+            {
+                r = rng.NextUInt32();
+            } while (r >= threshold);
+            int j = (int)(r % limit);
             (arr[i], arr[j]) = (arr[j], arr[i]);
         }
     }

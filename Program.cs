@@ -14,32 +14,24 @@ using CFScanner.Utils;
 if (!ArgParser.ParseArguments(args))
     return;
 
+CancellationManager.Setup();
+
+if (!AppValidator.CheckVpnRisk())
+    return;
+
 if (GlobalContext.Config.ResumeEnabled && !GlobalContext.Config.ResumeNewScan &&
     GlobalContext.Config.ResumeOnlyInvocation &&
     !await ResumeCoordinator.RestoreConfigurationFromCheckpointAsync())
     return;
 
-// 2. Pre-flight check: warn about VPN/Proxy usage
-// Running the scanner behind a VPN or proxy may cause abuse reports
-// or unreliable results.
-if (!AppValidator.CheckVpnRisk())
+if (!await AppValidator.ValidateInputs())
     return;
 
-// 3. Validate user inputs and environment
-// Checks input files, ASN database availability, and permissions.
-if (!AppValidator.ValidateInputs())
-    return;
-
-// 4. Initialize Xray/V2Ray (optional)
-// Downloads binary if missing and validates the user-provided config.
 if (GlobalContext.Config.EnableV2RayCheck)
 {
     if (!await XraySetup.InitializeAsync())
         return;
 }
-// Register global cancellation handler (Ctrl+C)
-// Ensures a graceful shutdown across all worker threads.
-CancellationManager.Setup();
 
 // 5. Prepare output file and print application header
 // Output file is created early to catch permission issues.

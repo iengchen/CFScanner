@@ -28,21 +28,21 @@ public class IpFilter
     /// <param name="cidrs">Inline CIDR strings (e.g., "192.168.0.0/16").</param>
     /// <param name="asns">AS numbers or description fragments to exclude (e.g., "13335" or "cloudflare").</param>
     /// <param name="asnDbPath">Path to the IP-to-ASN TSV database.</param>
-    public async Task BuildAsync(List<string> files, List<string> cidrs, List<string> asns, string asnDbPath)
+    public async Task BuildAsync(List<string> files, List<string> cidrs, List<string> asns, string asnDbPath, CancellationToken ct = default)
     {
         await Task.Run(() =>
         {
             var temp = new List<(uint, uint)>();
 
-            // Process exclusion files (CIDR lines)
             foreach (var path in files)
             {
+                ct.ThrowIfCancellationRequested();
                 if (!File.Exists(path)) continue;
                 foreach (var line in File.ReadLines(path))
                 {
+                    ct.ThrowIfCancellationRequested();
                     var s = line.Trim();
                     if (string.IsNullOrEmpty(s) || s.StartsWith("#")) continue;
-                    // Strip trailing comment
                     var parts = s.Split('#')[0].Trim().Split('/');
                     if (parts.Length != 2) continue;
                     if (IPAddress.TryParse(parts[0], out var ip) && int.TryParse(parts[1], out int mask))
@@ -50,19 +50,21 @@ public class IpFilter
                 }
             }
 
-            // Process inline CIDR exclusions
             foreach (var c in cidrs)
             {
+                ct.ThrowIfCancellationRequested();
                 var parts = c.Split('/');
                 if (parts.Length == 2 && IPAddress.TryParse(parts[0], out var ip) && int.TryParse(parts[1], out int mask))
                     AddRange(temp, ip, mask);
             }
 
-            // Process ASN exclusions using the IP-to-ASN database
             if (asns.Count > 0 && File.Exists(asnDbPath))
             {
                 foreach (var range in IpAsnSource.GetRanges(asnDbPath, asns))
+                {
+                    ct.ThrowIfCancellationRequested();
                     temp.Add(range);
+                }
             }
 
             // Merge overlapping/adjacent ranges

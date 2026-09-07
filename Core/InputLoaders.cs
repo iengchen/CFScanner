@@ -18,9 +18,8 @@ public static class InputLoader
     /// Builds the IP exclusion filter from files, inline CIDRs, and ASNs.
     /// Must be executed before loading scan targets.
     /// </summary>
-    public static async Task BuildExclusionsAsync()
+    public static async Task BuildExclusionsAsync(CancellationToken ct = default)
     {
-        // Skip if no exclusion sources are defined
         if (GlobalContext.Config.ExcludeFiles.Count == 0 &&
             GlobalContext.Config.ExcludeCidrs.Count == 0 &&
             GlobalContext.Config.ExcludeAsns.Count == 0)
@@ -28,12 +27,12 @@ public static class InputLoader
 
         Console.WriteLine("[Init] Building exclusion list...");
 
-        // Build exclusion ranges (CIDR + ASN-based IPs)
         await GlobalContext.IpFilter.BuildAsync(
             GlobalContext.Config.ExcludeFiles,
             GlobalContext.Config.ExcludeCidrs,
             GlobalContext.Config.ExcludeAsns,
-            GlobalContext.Config.AsnDbPath);
+            GlobalContext.Config.AsnDbPath,
+            ct);
 
         // Report exclusion coverage for visibility/debugging
         if (GlobalContext.IpFilter.RangeCount > 0)
@@ -91,9 +90,10 @@ public static class InputLoader
             Console.Write(
                 $"Loading ASNs ({string.Join(",", GlobalContext.Config.InputAsns)})... ");
 
-            foreach (var ip in IpFilter.IpAsnSource.GetIps(
+            var ips = await Task.Run(() => IpFilter.IpAsnSource.GetIps(
                          GlobalContext.Config.AsnDbPath,
-                         GlobalContext.Config.InputAsns))
+                         GlobalContext.Config.InputAsns).ToList());
+            foreach (var ip in ips)
             {
                 inputIps.Add(NetUtils.IpToUint(ip));
             }

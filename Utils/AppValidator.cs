@@ -45,7 +45,7 @@ public static class AppValidator
     /// </list>
     /// </summary>
     /// <returns><c>true</c> if all validations pass; <c>false</c> if any critical error is found.</returns>
-    public static bool ValidateInputs()
+    public static async Task<bool> ValidateInputs()
     {
         bool hasError = false;
 
@@ -124,7 +124,7 @@ public static class AppValidator
 
             if (confirmed)
             {
-                if (!FileUtils.DownloadAndExtractAsnDb(GlobalContext.Config.AsnDbPath))
+                if (!await FileUtils.DownloadAndExtractAsnDb(GlobalContext.Config.AsnDbPath))
                 {
                     ConsoleInterface.PrintError("Failed to download ASN database.");
                     hasError = true;

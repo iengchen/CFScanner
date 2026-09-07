@@ -21,7 +21,7 @@ public sealed class ResumeCoordinatorTests
             GlobalContext.Config.InputCidrs.Add("192.0.2.1/30");
             GlobalContext.OutputFilePath = results;
             GlobalContext.IsInfiniteMode = false;
-            var fingerprint = ScanConfigurationFingerprint.Compute(GlobalContext.Config, false);
+            var fingerprint = await ScanConfigurationFingerprint.Compute(GlobalContext.Config, false);
             var checkpoint = new ScanCheckpoint
             {
                 Mode = "finite",
@@ -72,7 +72,7 @@ public sealed class ResumeCoordinatorTests
             GlobalContext.Config.InputCidrs.Add("192.0.2.1/30");
             GlobalContext.OutputFilePath = results;
             GlobalContext.IsInfiniteMode = false;
-            var fingerprint = ScanConfigurationFingerprint.Compute(GlobalContext.Config, false);
+            var fingerprint = await ScanConfigurationFingerprint.Compute(GlobalContext.Config, false);
             var checkpoint = new ScanCheckpoint
             {
                 Mode = "finite",

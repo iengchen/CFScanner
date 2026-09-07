@@ -387,7 +387,21 @@ public static class ScannerWorkers
         if (string.IsNullOrWhiteSpace(headers))
             return false;
 
-        if (!headers.Contains(" 200 ", StringComparison.OrdinalIgnoreCase))
+        int firstLineEnd = headers.IndexOf("\r\n");
+        if (firstLineEnd < 0)
+            return false;
+
+        ReadOnlySpan<char> statusLine = headers.AsSpan(0, firstLineEnd);
+        int firstSpace = statusLine.IndexOf(' ');
+        if (firstSpace < 0)
+            return false;
+
+        ReadOnlySpan<char> statusCode = statusLine.Slice(firstSpace + 1);
+        int nextSpace = statusCode.IndexOf(' ');
+        if (nextSpace >= 0)
+            statusCode = statusCode.Slice(0, nextSpace);
+
+        if (!"200".Equals(statusCode, StringComparison.OrdinalIgnoreCase))
             return false;
 
         if (!headers.Contains("server: cloudflare", StringComparison.OrdinalIgnoreCase))

@@ -190,7 +190,7 @@ public static class FileUtils
     /// </summary>
     /// <param name="outputPath">Desired path for the extracted TSV file.</param>
     /// <returns>True if download and extraction succeeded; otherwise false.</returns>
-    public static bool DownloadAndExtractAsnDb(string outputPath)
+    public static async Task<bool> DownloadAndExtractAsnDb(string outputPath)
     {
         const string url = "https://iptoasn.com/data/ip2asn-v4.tsv.gz";
         string gzPath = outputPath + ".gz";
@@ -200,22 +200,21 @@ public static class FileUtils
             using (var handler = new HttpClientHandler())
             using (var client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) })
             {
-                // Set a user agent to avoid being blocked
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
-                using var response = client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).Result;
+                using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
                 long? totalBytes = response.Content.Headers.ContentLength;
 
-                using var input = response.Content.ReadAsStreamAsync().Result;
-                using var output = File.Create(gzPath);
+                using var input = await response.Content.ReadAsStreamAsync();
+                using var output = new FileStream(gzPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
 
                 var buffer = new byte[64 * 1024];
                 long totalRead = 0;
                 int read;
-                while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                while ((read = await input.ReadAsync(buffer)) > 0)
                 {
-                    output.Write(buffer, 0, read);
+                    await output.WriteAsync(buffer, 0, read);
                     totalRead += read;
                     if (totalBytes.HasValue)
                     {
@@ -229,9 +228,9 @@ public static class FileUtils
             using (var gzStream = new System.IO.Compression.GZipStream(
                 File.Open(gzPath, FileMode.Open, FileAccess.Read, FileShare.Read),
                 System.IO.Compression.CompressionMode.Decompress))
-            using (var outFile = File.Create(outputPath))
+            using (var outFile = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
             {
-                gzStream.CopyTo(outFile);
+                await gzStream.CopyToAsync(outFile);
             }
 
             File.Delete(gzPath);

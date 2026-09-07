@@ -203,11 +203,9 @@ public static class ScanConfigurationFingerprint
     /// <param name="checkpoint">The checkpoint to compare against.</param>
     /// <param name="infiniteMode">Whether the current invocation uses infinite random-IP mode.</param>
     /// <returns>List of human-readable difference descriptions.</returns>
-    public static IReadOnlyList<string> DescribeDifferences(Config config, ScanCheckpoint checkpoint, bool infiniteMode)
+    public static async Task<IReadOnlyList<string>> DescribeDifferences(Config config, ScanCheckpoint checkpoint, bool infiniteMode)
     {
         var prior = checkpoint.ConfigFingerprint;
-        // Fingerprints are intentionally opaque; callers still get a useful
-        // high-level explanation for the most common incompatible fields.
         var differences = new List<string>();
         if (checkpoint.Mode != (infiniteMode ? "infinite" : "finite")) differences.Add("mode");
         if (checkpoint.InputFiles.Length != config.InputFiles.Count ||
@@ -219,9 +217,9 @@ public static class ScanConfigurationFingerprint
         if (!SameValues(checkpoint.ExcludeAsns, config.ExcludeAsns)) differences.Add("exclude ASNs");
         if (!SameValues(checkpoint.InputRanges, config.InputCidrs)) differences.Add("input ranges");
         if (!SameValues(checkpoint.ExcludeRanges, config.ExcludeCidrs)) differences.Add("exclude ranges");
-        if (!string.Equals(checkpoint.AsnDatabaseIdentity, GetFileIdentity(config.AsnDbPath), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(checkpoint.AsnDatabaseIdentity, await GetFileIdentity(config.AsnDbPath), StringComparison.OrdinalIgnoreCase))
             differences.Add("ASN database");
-        if (!string.Equals(prior, Compute(config, infiniteMode), StringComparison.Ordinal)) differences.Add("effective scan settings");
+        if (!string.Equals(prior, await Compute(config, infiniteMode), StringComparison.Ordinal)) differences.Add("effective scan settings");
         return differences.Distinct(StringComparer.Ordinal).ToArray();
 
         static bool SameValues(IEnumerable<string> saved, IEnumerable<string> current, bool paths = false)
@@ -243,13 +241,14 @@ public static class ScanConfigurationFingerprint
     /// Explicit infinite-mode flag, or <c>null</c> to infer from the config inputs.
     /// </param>
     /// <returns>Lowercase hex-encoded SHA-256 hash of the canonical configuration.</returns>
-    public static string Compute(Config config, bool? infiniteMode = null)
+    public static async Task<string> Compute(Config config, bool? infiniteMode = null)
     {
+        var fields = await CanonicalFields(config, infiniteMode);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-            string.Join("\n", CanonicalFields(config, infiniteMode))))) .ToLowerInvariant();
+            string.Join("\n", fields)))).ToLowerInvariant();
     }
 
-    private static string[] CanonicalFields(Config config, bool? infiniteMode)
+    private static async Task<string[]> CanonicalFields(Config config, bool? infiniteMode)
     {
         static string FileIdentities(IEnumerable<string> paths) =>
             string.Join("|", paths.Select(Path.GetFullPath)
@@ -259,6 +258,8 @@ public static class ScanConfigurationFingerprint
                     : $"{x}|missing"));
         static string Values(IEnumerable<string> values, StringComparer comparer) =>
             string.Join(",", values.Select(x => x.Trim()).OrderBy(x => x, comparer));
+        var asnDb = await Identity(config.AsnDbPath);
+        var v2ray = await Identity(config.V2RayConfigPath);
         var canonical = string.Join("\n", new[]
         {
             "v1",
@@ -269,13 +270,13 @@ public static class ScanConfigurationFingerprint
             $"excludeAsns={Values(config.ExcludeAsns.Select(x => x.ToUpperInvariant()), StringComparer.Ordinal)}",
             $"inputRanges={Values(config.InputCidrs, StringComparer.Ordinal)}",
             $"excludeRanges={Values(config.ExcludeCidrs, StringComparer.Ordinal)}",
-            $"asnDb={Identity(config.AsnDbPath)}",
+            $"asnDb={asnDb}",
             $"ports={string.Join(",", config.Ports)}",
             $"sni={config.BaseSni}",
             $"latency={config.SaveLatency}",
             $"shuffle={config.Shuffle}",
             $"randomSni={config.RandomSNI}",
-            $"v2ray={Identity(config.V2RayConfigPath)}",
+            $"v2ray={v2ray}",
             $"speed={config.MinDownloadSpeedKb},{config.MinUploadSpeedKb}",
             $"workers={config.TcpWorkers},{config.SignatureWorkers},{config.V2RayWorkers},{config.SpeedTestWorkers}",
             $"timeouts={config.TcpTimeoutMs},{config.TlsTimeoutMs},{config.HttpReadTimeoutMs},{config.SignatureTotalTimeoutMs}"
@@ -283,21 +284,16 @@ public static class ScanConfigurationFingerprint
         return canonical.Split('\n');
     }
 
-    private static string Identity(string? path)
+    private static async Task<string> Identity(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
         var fullPath = Path.GetFullPath(path);
         if (!File.Exists(fullPath)) return $"{fullPath}|missing";
-        return $"{fullPath}|{Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(fullPath))).ToLowerInvariant()}";
+        var bytes = await File.ReadAllBytesAsync(fullPath);
+        return $"{fullPath}|{Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()}";
     }
 
-    /// <summary>
-    /// Returns the identity string for a file (path + SHA-256 hash), or a "missing" sentinel.
-    /// Used for fingerprinting input files and the ASN database.
-    /// </summary>
-    /// <param name="path">File path to identify, or <c>null</c>.</param>
-    /// <returns>Identity string in the format <c>fullPath|hash</c> or <c>fullPath|missing</c>.</returns>
-    public static string GetFileIdentity(string? path) => Identity(path);
+    public static async Task<string> GetFileIdentity(string? path) => await Identity(path);
 }
 
 /// <summary>
@@ -362,10 +358,13 @@ public static class ScanCheckpointStore
             if (durable) stream.Flush(flushToDisk: true);
         }
         var backup = path + ".bak";
-        if (File.Exists(path))
-            File.Replace(tempPath, path, backup, ignoreMetadataErrors: true);
-        else
-            File.Move(tempPath, path);
+        await Task.Run(() =>
+        {
+            if (File.Exists(path))
+                File.Replace(tempPath, path, backup, ignoreMetadataErrors: true);
+            else
+                File.Move(tempPath, path);
+        }, token);
     }
 
     /// <summary>
