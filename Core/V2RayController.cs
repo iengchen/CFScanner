@@ -21,6 +21,7 @@ public static class V2RayController
     // Constants for speed measurement calibration
     private const double EstimatedHeaderFraction = 0.005;
     private const int MaxRetries = 2;
+    private const int MaxXrayStartupAttempts = 3;
     private const int MinTransferTimeSec = 2;
     private const int MaxTransferTimeSec = 5;
 
@@ -133,50 +134,52 @@ public static class V2RayController
       CancellationToken ct,
       long sequence = -1)
     {
-        int localPort = GetFreeTcpPort();
+        int localPort = 0;
         Process? xrayProcess = null;
         bool processOwnershipTransferred = false;
 
         try
         {
-            var rootNode = JsonNode.Parse(GlobalContext.RawV2RayTemplate);
-            if (rootNode == null) return false;
-
-            // -----------------------------------------------------------------
-            // Inject local HTTP inbound for testing
-            // -----------------------------------------------------------------
-            rootNode["inbounds"] = new JsonArray(new JsonObject
+            for (var attempt = 0; attempt < MaxXrayStartupAttempts; attempt++)
             {
-                ["port"] = localPort,
-                ["listen"] = "127.0.0.1",
-                ["protocol"] = "http",
-                ["tag"] = "http-in-test",
-                ["settings"] = new JsonObject
+                localPort = GetFreeTcpPort();
+                var rootNode = JsonNode.Parse(GlobalContext.RawV2RayTemplate);
+                if (rootNode == null) return false;
+
+                rootNode["inbounds"] = new JsonArray(new JsonObject
                 {
-                    ["allowTransparent"] = false,
-                    ["timeout"] = 0
-                }
-            });
+                    ["port"] = localPort,
+                    ["listen"] = "127.0.0.1",
+                    ["protocol"] = "http",
+                    ["tag"] = "http-in-test",
+                    ["settings"] = new JsonObject
+                    {
+                        ["allowTransparent"] = false,
+                        ["timeout"] = 0
+                    }
+                });
 
-            // -----------------------------------------------------------------
-            // Patch outbound target IP and SNI
-            // -----------------------------------------------------------------
-            if (!TryPatchOutboundTarget(rootNode, ipAddress, port))
-            {
-                ConsoleInterface.PrintError(
-                    "Xray template has no patchable outbound target (settings.vnext[0]).");
-                return false;
+                if (!TryPatchOutboundTarget(rootNode, ipAddress, port))
+                {
+                    ConsoleInterface.PrintError(
+                        "Xray template has no patchable outbound target (settings.vnext[0]).");
+                    return false;
+                }
+
+                xrayProcess = await StartXrayProcessAsync(rootNode.ToJsonString());
+                if (xrayProcess is not null && !xrayProcess.HasExited &&
+                    await WaitForLocalPort(
+                        localPort,
+                        xrayProcess,
+                        GlobalContext.Config.XrayStartupTimeoutMs,
+                        ct))
+                    break;
+
+                await TerminateProcessAsync(xrayProcess);
+                xrayProcess = null;
             }
 
-            string finalConfigJson = rootNode.ToJsonString();
-
-            xrayProcess = await StartXrayProcessAsync(finalConfigJson);
-            if (xrayProcess == null || xrayProcess.HasExited) return false;
-
-            if (!await WaitForLocalPort(
-                    localPort,
-                    GlobalContext.Config.XrayStartupTimeoutMs,
-                    ct))
+            if (xrayProcess is null || xrayProcess.HasExited)
                 return false;
 
             var sw = Stopwatch.StartNew();
@@ -574,16 +577,24 @@ public static class V2RayController
     /// <param name="port">Port number to monitor</param>
     /// <param name="timeoutMs">Maximum wait time in milliseconds</param>
     /// <returns>True if port becomes available within timeout; otherwise false</returns>
-    private static async Task<bool> WaitForLocalPort(int port, int timeoutMs, CancellationToken ct = default)
+    private static async Task<bool> WaitForLocalPort(
+        int port,
+        Process process,
+        int timeoutMs,
+        CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
+            if (process.HasExited)
+                return false;
+
             try
             {
                 using var client = new TcpClient();
                 var connectTask = client.ConnectAsync("127.0.0.1", port);
-                if (await Task.WhenAny(connectTask, Task.Delay(50, ct)) == connectTask && client.Connected)
+                if (await Task.WhenAny(connectTask, Task.Delay(50, ct)) == connectTask &&
+                    client.Connected && !process.HasExited)
                     return true;
             }
             catch (OperationCanceledException) { return false; }
