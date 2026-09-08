@@ -157,7 +157,7 @@ public static class V2RayController
                 return false;
 
             var sw = Stopwatch.StartNew();
-            bool works = await TestThroughHttpProxy(localPort);
+            bool works = await TestThroughHttpProxy(localPort, ct);
             sw.Stop();
 
             if (!works) return false;
@@ -481,7 +481,7 @@ public static class V2RayController
     /// <summary>
     /// Tests connectivity through the HTTP proxy by requesting Google Static endpoint.
     /// </summary>
-    private static async Task<bool> TestThroughHttpProxy(int localPort)
+    private static async Task<bool> TestThroughHttpProxy(int localPort, CancellationToken ct)
     {
         try
         {
@@ -497,8 +497,12 @@ public static class V2RayController
                 Timeout = TimeSpan.FromMilliseconds(GlobalContext.Config.XrayConnectionTimeoutMs)
             };
 
-            var response = await client.GetAsync("http://www.gstatic.com/generate_204");
+            using var response = await client.GetAsync("http://www.gstatic.com/generate_204", ct);
             return response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NoContent;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
