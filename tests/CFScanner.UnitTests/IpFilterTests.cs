@@ -86,6 +86,19 @@ public sealed class IpFilterTests
     }
 
     [Fact, Trait("Category", "Unit")]
+    public async Task BuildAsync_SlashZeroMergesWithFollowingRanges()
+    {
+        TestState.Reset();
+        await GlobalContext.IpFilter.BuildAsync([], [
+            "0.0.0.0/0",
+            "192.0.2.0/24"
+        ], [], "missing.tsv");
+
+        Assert.Equal(1, GlobalContext.IpFilter.RangeCount);
+        Assert.True(GlobalContext.IpFilter.IsBlocked(IPAddress.Parse("203.0.113.10")));
+    }
+
+    [Fact, Trait("Category", "Unit")]
     public async Task BuildAsync_Slash32BlocksSingleAddress()
     {
         TestState.Reset();

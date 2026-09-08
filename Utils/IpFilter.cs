@@ -77,7 +77,8 @@ public class IpFilter
                 for (int i = 1; i < temp.Count; i++)
                 {
                     var next = temp[i];
-                    if (next.Item1 <= current.Item2 + 1)
+                    if (current.Item2 == uint.MaxValue ||
+                        next.Item1 <= current.Item2 + 1)
                         current.Item2 = Math.Max(current.Item2, next.Item2);
                     else
                     {
