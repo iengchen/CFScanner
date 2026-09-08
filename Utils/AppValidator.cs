@@ -114,10 +114,10 @@ public static class AppValidator
             GlobalContext.Config.InputAsns.Count > 0 ||
             GlobalContext.Config.ExcludeAsns.Count > 0;
 
-        if (usesAsn && !File.Exists(GlobalContext.Config.AsnDbPath))
+        if (usesAsn && !FileUtils.IsValidAsnDatabase(GlobalContext.Config.AsnDbPath))
         {
             bool confirmed = ConsoleInterface.PrintWarning(
-                $"ASN database not found: {GlobalContext.Config.AsnDbPath}\n" +
+                $"ASN database is missing or invalid: {GlobalContext.Config.AsnDbPath}\n" +
                 "The ASN database is required for ASN-based scanning.\n" +
                 "Do you want to download it from iptoasn.com now?",
                 requireConfirmation: true);

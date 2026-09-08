@@ -200,7 +200,14 @@ public static class FileUtils
     public static async Task<bool> DownloadAndExtractAsnDb(string outputPath)
     {
         const string url = "https://iptoasn.com/data/ip2asn-v4.tsv.gz";
-        string gzPath = outputPath + ".gz";
+        var fullOutputPath = Path.GetFullPath(outputPath);
+        var outputDirectory = Path.GetDirectoryName(fullOutputPath)!;
+        Directory.CreateDirectory(outputDirectory);
+        var temporaryPrefix = Path.Combine(
+            outputDirectory,
+            $".{Path.GetFileName(fullOutputPath)}.{Guid.NewGuid():N}");
+        var gzPath = temporaryPrefix + ".gz";
+        var extractedPath = temporaryPrefix + ".tsv";
         try
         {
             Console.WriteLine("[Info] Downloading ASN database...");
@@ -232,15 +239,20 @@ public static class FileUtils
             }
 
             Console.WriteLine("\n[Info] Extracting ASN database...");
-            using (var gzStream = new System.IO.Compression.GZipStream(
-                File.Open(gzPath, FileMode.Open, FileAccess.Read, FileShare.Read),
-                System.IO.Compression.CompressionMode.Decompress))
-            using (var outFile = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
+            await using (var compressedFile = new FileStream(
+                gzPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous))
+            await using (var gzStream = new System.IO.Compression.GZipStream(
+                compressedFile, System.IO.Compression.CompressionMode.Decompress))
+            await using (var outFile = new FileStream(
+                extractedPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
             {
                 await gzStream.CopyToAsync(outFile);
             }
 
-            File.Delete(gzPath);
+            if (!IsValidAsnDatabase(extractedPath))
+                throw new InvalidDataException("Downloaded ASN database has no valid data rows.");
+
+            File.Move(extractedPath, fullOutputPath, overwrite: true);
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("[OK] ASN database downloaded and extracted successfully.");
             Console.ResetColor();
@@ -253,5 +265,40 @@ public static class FileUtils
             Console.ResetColor();
             return false;
         }
+        finally
+        {
+            TryDelete(gzPath);
+            TryDelete(extractedPath);
+        }
+    }
+
+    /// <summary>Checks whether a file contains at least one structurally valid IP-to-ASN TSV row.</summary>
+    public static bool IsValidAsnDatabase(string path)
+    {
+        if (!File.Exists(path)) return false;
+
+        try
+        {
+            foreach (var line in File.ReadLines(path))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                var parts = line.Split('\t');
+                if (parts.Length < 3) continue;
+                if (NetUtils.TryParseIpv4(parts[0], out _) &&
+                    NetUtils.TryParseIpv4(parts[1], out _) &&
+                    long.TryParse(parts[2], out _))
+                    return true;
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+
+        return false;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch { }
     }
 }

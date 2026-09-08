@@ -204,4 +204,16 @@ public sealed class FileUtilsTests : IDisposable
         var ips = await FileUtils.LoadIpsAsync(path);
         Assert.Equal(new[] { "192.0.2.1", "192.0.2.2", "192.0.2.3" }, ips.Select(ip => ip.ToString()));
     }
+
+    [Fact, Trait("Category", "Unit")]
+    public void IsValidAsnDatabase_RejectsPartialDataAndAcceptsTsvRow()
+    {
+        var invalidPath = Path.Combine(_tempDir, "partial.tsv");
+        var validPath = Path.Combine(_tempDir, "valid.tsv");
+        File.WriteAllText(invalidPath, "192.0.2.0\t192.0.2.255\t");
+        File.WriteAllText(validPath, "192.0.2.0\t192.0.2.255\t64496\tExample\n");
+
+        Assert.False(FileUtils.IsValidAsnDatabase(invalidPath));
+        Assert.True(FileUtils.IsValidAsnDatabase(validPath));
+    }
 }
