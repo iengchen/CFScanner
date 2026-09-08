@@ -167,6 +167,19 @@ public sealed class IpFilterTests
         finally { File.Delete(dbPath); }
     }
 
+    [Fact(Timeout = 5_000), Trait("Category", "Unit")]
+    public async Task GetIps_RangeEndingAtUintMaxValueTerminates()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"cfscanner-asn-max-{Guid.NewGuid():N}.tsv");
+        await File.WriteAllTextAsync(dbPath, "255.255.255.254\t255.255.255.255\t13335\tTEST\n");
+        try
+        {
+            var ips = IpFilter.IpAsnSource.GetIps(dbPath, ["13335"]).Select(ip => ip.ToString()).ToList();
+            Assert.Equal(["255.255.255.254", "255.255.255.255"], ips);
+        }
+        finally { File.Delete(dbPath); }
+    }
+
     [Fact, Trait("Category", "Unit")]
     public async Task Clear_ResetsAccumulatedRanges()
     {

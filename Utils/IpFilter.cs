@@ -186,8 +186,12 @@ public class IpFilter
                 {
                     uint start = IpToUint(parts[0]);
                     uint end = IpToUint(parts[1]);
-                    for (uint i = start; i <= end; i++)
+                    for (uint i = start; ; i++)
+                    {
                         yield return UintToIp(i);
+                        if (i == end)
+                            break;
+                    }
                 }
             }
         }
