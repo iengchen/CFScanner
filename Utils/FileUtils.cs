@@ -8,6 +8,9 @@ namespace CFScanner.Utils;
 public static class FileUtils
 {
     private static readonly Lock FileLock = new();
+    private static readonly HashSet<string> WrittenEndpoints =
+        new(StringComparer.Ordinal);
+    private static string? _indexedOutputPath;
 
     /// <summary>
     /// Creates the output directory and sets the full path of the results file in <see cref="GlobalContext.OutputFilePath"/>.
@@ -61,6 +64,10 @@ public static class FileUtils
     {
         lock (FileLock)
         {
+            EnsureResultIndex();
+            if (!WrittenEndpoints.Add(CreateEndpointKey(ip, port)))
+                return;
+
             string line;
             bool isMultiPort = GlobalContext.Config.Ports.Count > 1;
 
@@ -92,6 +99,71 @@ public static class FileUtils
 
             File.AppendAllText(GlobalContext.OutputFilePath, line + Environment.NewLine);
         }
+    }
+
+    private static void EnsureResultIndex()
+    {
+        if (string.Equals(_indexedOutputPath, GlobalContext.OutputFilePath,
+                StringComparison.OrdinalIgnoreCase))
+            return;
+
+        WrittenEndpoints.Clear();
+        _indexedOutputPath = GlobalContext.OutputFilePath;
+
+        if (!GlobalContext.Config.ResumeEnabled ||
+            !File.Exists(GlobalContext.OutputFilePath))
+            return;
+
+        foreach (var line in File.ReadLines(GlobalContext.OutputFilePath))
+        {
+            if (TryGetEndpointKey(line, out var key))
+                WrittenEndpoints.Add(key);
+        }
+    }
+
+    private static string CreateEndpointKey(string ip, int port) => $"{ip}:{port}";
+
+    private static bool TryGetEndpointKey(string line, out string key)
+    {
+        key = string.Empty;
+        var value = line.Trim();
+        if (value.Length == 0)
+            return false;
+
+        const string portMarker = "#Port:";
+        var markerIndex = value.IndexOf(portMarker, StringComparison.Ordinal);
+        if (markerIndex >= 0)
+        {
+            var ip = value[..markerIndex].Trim();
+            var remaining = value[(markerIndex + portMarker.Length)..];
+            var portText = remaining.Split('#', 2)[0].Trim();
+            if (NetUtils.TryParseIpv4(ip, out _) && int.TryParse(portText, out var port))
+            {
+                key = CreateEndpointKey(ip, port);
+                return true;
+            }
+            return false;
+        }
+
+        if (GlobalContext.Config.Ports.Count > 1)
+        {
+            var separator = value.LastIndexOf(':');
+            if (separator > 0 &&
+                NetUtils.TryParseIpv4(value[..separator], out _) &&
+                int.TryParse(value[(separator + 1)..], out var port))
+            {
+                key = CreateEndpointKey(value[..separator], port);
+                return true;
+            }
+            return false;
+        }
+
+        var singlePortIp = value.Split('#', 2)[0].Trim();
+        if (!NetUtils.TryParseIpv4(singlePortIp, out _))
+            return false;
+
+        key = CreateEndpointKey(singlePortIp, GlobalContext.Config.Ports[0]);
+        return true;
     }
 
     /// <summary>
