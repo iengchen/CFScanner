@@ -392,10 +392,7 @@ public static class ResumeCoordinator
         // that case final cleanup may remove the empty file; it is still safe
         // to resume because the append path recreates it.
         if (!File.Exists(checkpoint.ResultsPath))
-            return checkpoint.ResultsFileLength < 0 &&
-                   checkpoint.ResultsFileCreatedUtc is null &&
-                   checkpoint.ResultsFileLastWriteUtc is null &&
-                   !checkpoint.Completed;
+            return checkpoint.ResultsFileLength <= 0 && !checkpoint.Completed;
         var info = new FileInfo(checkpoint.ResultsPath);
         if (checkpoint.ResultsFileLength >= 0 && info.Length < checkpoint.ResultsFileLength) return false;
         if (checkpoint.ResultsFileCreatedUtc is not null &&

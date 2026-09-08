@@ -121,6 +121,10 @@ public sealed class ResumeCheckpointTests
         };
 
         Assert.True(ResumeCoordinator.IsResultsFileCompatible(checkpoint));
+        checkpoint.ResultsFileLength = 0;
+        checkpoint.ResultsFileCreatedUtc = DateTime.UtcNow;
+        checkpoint.ResultsFileLastWriteUtc = DateTime.UtcNow;
+        Assert.True(ResumeCoordinator.IsResultsFileCompatible(checkpoint));
         checkpoint.Completed = true;
         Assert.False(ResumeCoordinator.IsResultsFileCompatible(checkpoint));
     }
