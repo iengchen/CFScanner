@@ -334,7 +334,9 @@ public static class ScannerWorkers
                     System.Security.Cryptography.X509Certificates.X509RevocationMode.NoCheck
             };
 
-            await sslStream.AuthenticateAsClientAsync(authOptions, token);
+            using var tlsCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            tlsCts.CancelAfter(GlobalContext.Config.TlsTimeoutMs);
+            await sslStream.AuthenticateAsClientAsync(authOptions, tlsCts.Token);
 
             string request =
                 $"HEAD / HTTP/1.1\r\n" +
@@ -351,9 +353,11 @@ public static class ScannerWorkers
 
             try
             {
+                using var httpReadCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                httpReadCts.CancelAfter(GlobalContext.Config.HttpReadTimeoutMs);
                 while (true)
                 {
-                    int read = await sslStream.ReadAsync(buffer, token);
+                    int read = await sslStream.ReadAsync(buffer, httpReadCts.Token);
                     if (read <= 0) break;
 
                     sb.Append(Encoding.ASCII.GetString(buffer, 0, read));
