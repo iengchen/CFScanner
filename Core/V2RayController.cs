@@ -165,7 +165,7 @@ public static class V2RayController
 
             string finalConfigJson = rootNode.ToJsonString();
 
-            xrayProcess = StartXrayProcess(finalConfigJson);
+            xrayProcess = await StartXrayProcessAsync(finalConfigJson);
             if (xrayProcess == null || xrayProcess.HasExited) return false;
 
             if (!await WaitForLocalPort(
@@ -461,8 +461,9 @@ public static class V2RayController
     /// Starts an Xray process with the specified JSON configuration.
     /// Configuration is passed via standard input stream.
     /// </summary>
-    private static Process? StartXrayProcess(string jsonConfig)
+    private static async Task<Process?> StartXrayProcessAsync(string jsonConfig)
     {
+        Process? process = null;
         try
         {
             var psi = new ProcessStartInfo
@@ -476,7 +477,7 @@ public static class V2RayController
                 RedirectStandardError = true
             };
 
-            var process = new Process { StartInfo = psi };
+            process = new Process { StartInfo = psi };
             process.Start();
 
             process.BeginOutputReadLine();
@@ -491,6 +492,7 @@ public static class V2RayController
         }
         catch (Exception ex)
         {
+            await TerminateProcessAsync(process);
             ConsoleInterface.PrintError($"Failed to start Xray process: {ex.Message}");
             return null;
         }
