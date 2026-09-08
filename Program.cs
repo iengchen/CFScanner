@@ -70,6 +70,7 @@ if (totalIps == 0 && !isInfinite)
 {
     ConsoleInterface.PrintError(
         "No IPs found to scan (check inputs or exclusions).");
+    FileUtils.DeleteEmptyOutputFile();
     if (GlobalContext.Config.ResumeEnabled) ResumeCoordinator.Dispose();
     return;
 }

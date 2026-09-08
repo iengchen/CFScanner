@@ -1,4 +1,5 @@
 using System.Net;
+using System.Collections.Concurrent;
 using CFScanner;
 using CFScanner.Utils;
 using Xunit;
@@ -22,14 +23,21 @@ public sealed class FileUtilsTests : IDisposable
     }
 
     [Fact, Trait("Category", "Unit")]
-    public void SetupOutputFile_CreatesResultsDirectoryAndAssignsPath()
+    public void SetupOutputFile_AtomicallyReservesUniqueResultPaths()
     {
-        // SaveResult uses AppDomain.BaseDirectory, so instead of touching the
-        // production path we just confirm the helper doesn't throw and sets
-        // a non-empty path.
-        FileUtils.SetupOutputFile();
-        Assert.False(string.IsNullOrEmpty(GlobalContext.OutputFilePath));
-        Assert.EndsWith(".txt", GlobalContext.OutputFilePath);
+        var reservedPaths = new ConcurrentBag<string>();
+        Parallel.For(0, 8, _ => reservedPaths.Add(FileUtils.SetupOutputFile()));
+        var paths = reservedPaths.ToArray();
+        try
+        {
+            Assert.Equal(paths.Length, paths.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            Assert.All(paths, path => Assert.True(File.Exists(path)));
+        }
+        finally
+        {
+            foreach (var path in paths)
+                try { File.Delete(path); } catch { }
+        }
     }
 
     [Fact, Trait("Category", "Unit")]

@@ -12,11 +12,42 @@ public static class FileUtils
     /// <summary>
     /// Creates the output directory and sets the full path of the results file in <see cref="GlobalContext.OutputFilePath"/>.
     /// </summary>
-    public static void SetupOutputFile()
+    public static string SetupOutputFile()
     {
         string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "results");
         Directory.CreateDirectory(dir);
-        GlobalContext.OutputFilePath = Path.Combine(dir, $"verified_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
+
+        // Reserve the output path while choosing it. Timestamp-only names can
+        // collide when two scanner processes start in the same second.
+        for (int attempt = 0; attempt < 100; attempt++)
+        {
+            var path = Path.Combine(dir,
+                $"verified_{DateTime.Now:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid():N}.txt");
+            try
+            {
+                using var _ = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                GlobalContext.OutputFilePath = path;
+                return path;
+            }
+            catch (IOException) when (attempt < 99)
+            {
+                // A collision is extraordinarily unlikely with a GUID, but
+                // retry keeps the operation correct even in that case.
+            }
+        }
+
+        throw new IOException("Unable to reserve a unique results file path.");
+    }
+
+    /// <summary>Deletes the current output file only when no results were written.</summary>
+    public static void DeleteEmptyOutputFile()
+    {
+        lock (FileLock)
+        {
+            if (File.Exists(GlobalContext.OutputFilePath) &&
+                new FileInfo(GlobalContext.OutputFilePath).Length == 0)
+                File.Delete(GlobalContext.OutputFilePath);
+        }
     }
 
     /// <summary>
