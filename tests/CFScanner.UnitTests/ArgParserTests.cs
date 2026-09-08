@@ -110,20 +110,21 @@ public sealed class ArgParserTests
     [Fact, Trait("Category", "Unit")]
     public void Parse_SpeedBandwidth_MbAndKbAndBareNumber()
     {
-        Assert.True(Parse(["--speed-dl", "2mb", "--speed-ul", "512kb", "-r", "192.0.2.1", "-y"]));
+        Assert.False(Parse(["--speed-dl", "2mb", "--speed-ul", "512kb", "-r", "192.0.2.1", "-y"]));
+
+        Assert.True(Parse(["--speed-dl", "2mb", "--speed-ul", "512kb", "-vc", "xray.json", "-r", "192.0.2.1", "-y"]));
         Assert.Equal(2 * 1024, GlobalContext.Config.MinDownloadSpeedKb);
         Assert.Equal(512, GlobalContext.Config.MinUploadSpeedKb);
-        // V2Ray is not enabled by -y alone, so EnableSpeedTest must remain false.
-        Assert.False(GlobalContext.Config.EnableSpeedTest);
+        Assert.True(GlobalContext.Config.EnableSpeedTest);
 
-        Assert.True(Parse(["--speed-dl", "1500", "-r", "192.0.2.1", "-y"]));
+        Assert.True(Parse(["--speed-dl", "1500", "-vc", "xray.json", "-r", "192.0.2.1", "-y"]));
         Assert.Equal(1500, GlobalContext.Config.MinDownloadSpeedKb);
     }
 
     [Fact, Trait("Category", "Unit")]
     public void Parse_SpeedBandwidth_KAndMSuffix()
     {
-        Assert.True(Parse(["--speed-dl", "3m", "--speed-ul", "256k", "-r", "192.0.2.1", "-y"]));
+        Assert.True(Parse(["--speed-dl", "3m", "--speed-ul", "256k", "-vc", "xray.json", "-r", "192.0.2.1", "-y"]));
         Assert.Equal(3 * 1024, GlobalContext.Config.MinDownloadSpeedKb);
         Assert.Equal(256, GlobalContext.Config.MinUploadSpeedKb);
     }
@@ -154,7 +155,7 @@ public sealed class ArgParserTests
     [Fact, Trait("Category", "Unit")]
     public void Parse_BehaviorFlags_ToggleCorrectly()
     {
-        Assert.True(Parse(["-y", "--sort", "-s", "-nl", "--random-sni", "-r", "192.0.2.1"]));
+        Assert.True(Parse(["-y", "--sort", "-s", "-nl", "--random-sni", "-vc", "xray.json", "-r", "192.0.2.1"]));
         Assert.True(GlobalContext.Config.SortResults);
         Assert.True(GlobalContext.Config.Shuffle);
         Assert.False(GlobalContext.Config.SaveLatency);

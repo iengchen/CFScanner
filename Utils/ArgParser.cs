@@ -157,6 +157,11 @@ public static class ArgParser
             ErrorAndExit("'--new' requires '--resume'.");
         if (GlobalContext.Config.ResumeNewScan && !string.IsNullOrWhiteSpace(GlobalContext.Config.ResumeSessionId))
             ErrorAndExit("'--new' cannot be combined with '--resume-session'.");
+        if ((GlobalContext.Config.MinDownloadSpeedKb > 0 || GlobalContext.Config.MinUploadSpeedKb > 0) &&
+            !GlobalContext.Config.EnableV2RayCheck)
+            ErrorAndExit("'--speed-dl' and '--speed-ul' require '-vc' or '--v2ray-config'.");
+        if (GlobalContext.Config.RandomSNI && !GlobalContext.Config.EnableV2RayCheck)
+            ErrorAndExit("'--random-sni' requires '-vc' or '--v2ray-config'.");
 
         // 5. User Feedback
         if (!skipConfirmation &&

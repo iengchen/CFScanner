@@ -42,7 +42,7 @@ public sealed class UtilitiesTests
         c.SpeedTestWorkers = Defaults.SpeedTestWorkers; c.SpeedTestBuffer = Defaults.SpeedTestBuffer;
         c.SaveLatency = true; c.Shuffle = false; c.SortResults = false; c.RandomSNI = false;
         Assert.True(ArgParser.ParseArguments(["--fast", "--tcp-workers", "7", "--speed-workers", "3",
-            "--port", "443,8443,443", "-r", "192.0.2.1", "-y", "--no-latency", "--shuffle", "--sort", "--random-sni"]));
+            "--port", "443,8443,443", "-r", "192.0.2.1", "-y", "--no-latency", "--shuffle", "--sort", "--random-sni", "-vc", "xray.json"]));
         Assert.Equal(7, c.TcpWorkers); Assert.Equal(100, c.TcpChannelBuffer);
         Assert.Equal(4, c.SpeedTestBuffer); Assert.Equal([443, 8443], c.Ports);
         Assert.False(c.SaveLatency); Assert.True(c.Shuffle); Assert.True(c.SortResults); Assert.True(c.RandomSNI);
