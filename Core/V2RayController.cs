@@ -518,7 +518,7 @@ public static class V2RayController
             };
 
             using var response = await client.GetAsync("http://www.gstatic.com/generate_204", ct);
-            return response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NoContent;
+            return response.StatusCode == HttpStatusCode.NoContent;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
