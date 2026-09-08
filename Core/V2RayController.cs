@@ -161,7 +161,12 @@ public static class V2RayController
             // -----------------------------------------------------------------
             // Patch outbound target IP and SNI
             // -----------------------------------------------------------------
-            TryPatchOutboundTarget(rootNode, ipAddress,port);
+            if (!TryPatchOutboundTarget(rootNode, ipAddress, port))
+            {
+                ConsoleInterface.PrintError(
+                    "Xray template has no patchable outbound target (settings.vnext[0]).");
+                return false;
+            }
 
             string finalConfigJson = rootNode.ToJsonString();
 
@@ -599,63 +604,64 @@ public static class V2RayController
     /// <param name="rootNode">Root JSON node of the Xray configuration.</param>
     /// <param name="ipAddress">Target IP address to inject.</param>
     /// <param name="port">Target port number to inject.</param>
-    private static void TryPatchOutboundTarget(
+    private static bool TryPatchOutboundTarget(
     JsonNode rootNode,
     string ipAddress,
     int port)
     {
         try
         {
-            var outbound =
-                rootNode["outbounds"]?[0];
-
-            var vnext =
-                outbound?["settings"]?["vnext"]?[0];
+            var outbounds = rootNode["outbounds"] as JsonArray;
+            var outbound = outbounds?
+                .OfType<JsonObject>()
+                .FirstOrDefault(candidate =>
+                    candidate["settings"]?["vnext"] is JsonArray vnext &&
+                    vnext.Count > 0 &&
+                    vnext[0] is JsonObject endpoint &&
+                    endpoint["address"] is not null &&
+                    endpoint["port"] is not null);
+            var vnext = outbound?["settings"]?["vnext"]?[0] as JsonObject;
+            if (vnext is null)
+                return false;
 
             // -------------------------------------------------------------
             // Replace target address (always)
             // -------------------------------------------------------------
-            if (vnext?["address"] != null)
-            {
-                vnext["address"] = ipAddress;
-            }
+            vnext["address"] = ipAddress;
             // -------------------------------------------------------------
             // Replace target port (always)
             // -------------------------------------------------------------
-            if (vnext?["port"] != null)
-            {
-                vnext["port"] = port;
-            }
+            vnext["port"] = port;
 
             // -------------------------------------------------------------
             // Randomize SNI (only if enabled and subdomain exists)
             // -------------------------------------------------------------
             if (!GlobalContext.Config.RandomSNI)
-                return;
+                return true;
 
             var tlsSettings =
                 outbound?["streamSettings"]?["tlsSettings"];
 
             var serverNameNode = tlsSettings?["serverName"];
             if (serverNameNode == null)
-                return;
+                return true;
 
             string serverName = serverNameNode.GetValue<string>();
 
             var labels = serverName.Split('.', StringSplitOptions.RemoveEmptyEntries);
             if (labels.Length < 3)
-                return; // No subdomain → do not touch SNI
+                return true; // No subdomain → do not touch SNI
 
             labels[0] = Guid.NewGuid().ToString("N");
 
             string newServerName = string.Join('.', labels);
 
             tlsSettings!["serverName"] = newServerName;
+            return true;
         }
         catch
         {
-            // Intentionally ignored:
-            // Non-standard or unsupported configs are skipped silently
+            return false;
         }
     }
 }
