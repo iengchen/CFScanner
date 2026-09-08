@@ -81,8 +81,14 @@ public static class ConsoleInterface
         Console.WriteLine($"[Warning] {msg}");
         Console.ResetColor();
 
-        if (!requireConfirmation || Console.IsOutputRedirected)
+        if (!requireConfirmation)
             return true;
+
+        // A confirmation cannot be safely collected when either end of the
+        // console is redirected. Fail closed instead of silently approving
+        // a warning or calling ReadKey on redirected input.
+        if (Console.IsInputRedirected || Console.IsOutputRedirected)
+            return false;
 
         Console.ForegroundColor = ConsoleColor.DarkCyan;
         Console.Write("Continue? Press 'Y' to proceed, any other key to cancel: ");
