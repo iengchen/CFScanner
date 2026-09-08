@@ -348,6 +348,7 @@ Checkpoints never store credentials or raw Xray templates.
 Use `cfscanner --resume --new` to start a fresh resumable scan without
 consulting or deleting previous checkpoints. `--new` cannot be combined with
 `--resume-session`.
+
 ------------------------------------------------------------------------
 
 ## ⚠️ Disclaimer
