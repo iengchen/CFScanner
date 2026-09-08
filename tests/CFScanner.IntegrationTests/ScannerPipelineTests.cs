@@ -181,6 +181,25 @@ public sealed class ScannerPipelineTests : IDisposable
         await secondServer.Completion.WaitAsync(TestContext.Current.CancellationToken);
     }
 
+    [Fact(Timeout = 10_000), Trait("Category", "Integration")]
+    public async Task ScanEngine_ResultWriteFailure_CancelsAndPropagatesAfterCleanup()
+    {
+        await using var server = await TlsResponseServer.StartAsync(
+            "HTTP/1.1 200 OK\r\nserver: cloudflare\r\ncf-ray: write-failure\r\n\r\n",
+            connectionCount: 1);
+        GlobalContext.Config.Ports = [server.Port];
+        GlobalContext.Config.TcpWorkers = 1;
+        GlobalContext.Config.SignatureWorkers = 1;
+        GlobalContext.Config.TcpChannelBuffer = 1;
+        GlobalContext.OutputFilePath = _tempDir;
+
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            ScanEngine.RunScanAsync([IPAddress.Loopback]).WaitAsync(TimeSpan.FromSeconds(5)));
+
+        Assert.True(GlobalContext.Cts.IsCancellationRequested);
+        await server.Completion.WaitAsync(TestContext.Current.CancellationToken);
+    }
+
     private sealed class TlsResponseServer : IAsyncDisposable
     {
         private readonly TcpListener _listener;

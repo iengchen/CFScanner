@@ -158,6 +158,10 @@ public static class ScanEngine
         // ---------------------------------------------------------------------
         // 6. Stage 1 Producer (Parallel TCP Connection Attempts)
         // ---------------------------------------------------------------------
+        Exception? pipelineFailure = null;
+        var allWorkerTasks = signatureTasks.Concat(v2rayTasks).Concat(speedTestTasks).ToArray();
+        var workerFailureTask = WaitForWorkerFailureAsync(allWorkerTasks);
+
         try
         {
             var ports = GlobalContext.Config.Ports;
@@ -173,7 +177,7 @@ public static class ScanEngine
                 // already-completed endpoints instead of probing them again.
                 .Where(item => item.sequence >= GlobalContext.ResumeCursor);
 
-            await Parallel.ForEachAsync(
+            var producerTask = Parallel.ForEachAsync(
                 ipPortSource,
                 new ParallelOptions
                 {
@@ -192,10 +196,24 @@ public static class ScanEngine
                         ct,
                         item.sequence);
                 });
+
+            if (await Task.WhenAny(producerTask, workerFailureTask) == workerFailureTask)
+            {
+                pipelineFailure = await workerFailureTask;
+                if (pipelineFailure is not null)
+                    GlobalContext.Cts.Cancel();
+            }
+
+            await producerTask;
         }
         catch (OperationCanceledException)
         {
             // Expected during controlled shutdown (e.g. Ctrl+C).
+        }
+        catch (Exception ex)
+        {
+            pipelineFailure ??= ex;
+            GlobalContext.Cts.Cancel();
         }
 
         // ---------------------------------------------------------------------
@@ -203,20 +221,26 @@ public static class ScanEngine
         // ---------------------------------------------------------------------
         // Complete each channel and await every worker even after cancellation.
         // This guarantees no pipeline/Xray task outlives ScanEngine shutdown.
-        tcpChannel.Writer.TryComplete();
-        await AwaitWorkersAsync(signatureTasks);
+        tcpChannel.Writer.TryComplete(pipelineFailure);
+        pipelineFailure ??= await AwaitWorkersAsync(signatureTasks);
+        if (pipelineFailure is not null)
+            GlobalContext.Cts.Cancel();
         DrainTcpConnections(tcpChannel.Reader);
 
         if (v2rayChannel != null)
         {
-            v2rayChannel.Writer.TryComplete();
-            await AwaitWorkersAsync(v2rayTasks);
+            v2rayChannel.Writer.TryComplete(pipelineFailure);
+            pipelineFailure ??= await AwaitWorkersAsync(v2rayTasks);
+            if (pipelineFailure is not null)
+                GlobalContext.Cts.Cancel();
         }
 
         if (speedTestChannel != null)
         {
-            speedTestChannel.Writer.TryComplete();
-            await AwaitWorkersAsync(speedTestTasks);
+            speedTestChannel.Writer.TryComplete(pipelineFailure);
+            pipelineFailure ??= await AwaitWorkersAsync(speedTestTasks);
+            if (pipelineFailure is not null)
+                GlobalContext.Cts.Cancel();
             await DrainSpeedTestRequestsAsync(speedTestChannel.Reader);
         }
 
@@ -233,12 +257,34 @@ public static class ScanEngine
 
         ConsoleInterface.HideStatusLine();
         GlobalContext.Stopwatch.Stop();
+
+        if (pipelineFailure is not null)
+            throw pipelineFailure;
     }
 
-    private static async Task AwaitWorkersAsync(IEnumerable<Task> workers)
+    private static async Task<Exception?> AwaitWorkersAsync(IEnumerable<Task> workers)
     {
-        try { await Task.WhenAll(workers); }
-        catch (OperationCanceledException) { }
+        try
+        {
+            await Task.WhenAll(workers);
+            return null;
+        }
+        catch (OperationCanceledException) { return null; }
+        catch (Exception ex) { return ex; }
+    }
+
+    private static async Task<Exception?> WaitForWorkerFailureAsync(IEnumerable<Task> workers)
+    {
+        var pending = workers.ToList();
+        while (pending.Count > 0)
+        {
+            var completed = await Task.WhenAny(pending);
+            pending.Remove(completed);
+            if (completed.IsFaulted)
+                return completed.Exception?.GetBaseException();
+        }
+
+        return null;
     }
 
     private static void DrainTcpConnections(ChannelReader<ScannerWorkers.LiveConnection> reader)
