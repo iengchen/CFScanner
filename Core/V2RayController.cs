@@ -19,7 +19,6 @@ namespace CFScanner.Core;
 public static class V2RayController
 {
     // Constants for speed measurement calibration
-    private const double EstimatedHeaderFraction = 0.005;
     private const int MaxRetries = 2;
     private const int MaxXrayStartupAttempts = 3;
     private const int MinTransferTimeSec = 2;
@@ -377,21 +376,11 @@ public static class V2RayController
                 double transferTime = dataSw.Elapsed.TotalSeconds;
                 if (transferTime < 0.1) transferTime = 0.1;
 
-                double bytesWithOverhead = totalRead * (1 + EstimatedHeaderFraction);
-                long rawSpeedKb = (long)((bytesWithOverhead / 1024.0) / transferTime);
-
-                // Apply correction factor for short transfer times
-                double correction = 1.0;
-                if (transferTime < MinTransferTimeSec)
-                {
-                    correction = 1.0 + (MinTransferTimeSec - transferTime) * 0.5;
-                    if (correction > 2.0) correction = 2.0;
-                }
-                speedKb = (long)(rawSpeedKb * correction);
+                speedKb = (long)((totalRead / 1024.0) / transferTime);
 
                 // Determine test outcome
                 if (speedKb < GlobalContext.Config.MinDownloadSpeedKb && transferTime >= MaxTransferTimeSec * 0.9) return 0;
-                if (speedKb >= GlobalContext.Config.MinDownloadSpeedKb * 1.2 || transferTime < 0.5) return speedKb;
+                if (speedKb >= GlobalContext.Config.MinDownloadSpeedKb * 1.2) return speedKb;
             }
             catch
             {
@@ -442,10 +431,7 @@ public static class V2RayController
 
             if (!response.IsSuccessStatusCode) return 0;
 
-            double totalSeconds = swTotal.Elapsed.TotalSeconds;
-            // Subtract estimated handshake and overhead latency
-            double estimatedLatency = Math.Min(0.5, totalSeconds * 0.2);
-            double transferSeconds = totalSeconds - estimatedLatency;
+            double transferSeconds = swTotal.Elapsed.TotalSeconds;
 
             if (transferSeconds < 0.1) transferSeconds = 0.1;
 
