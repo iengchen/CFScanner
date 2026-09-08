@@ -46,10 +46,17 @@ public sealed class NetUtilsTests
     }
 
     [Fact, Trait("Category", "Unit")]
-    public void ExpandCidr_SequentialIPsStartFromBase()
+    public void ExpandCidr_NormalizesHostBitsToNetworkBase()
     {
         var ips = NetUtils.ExpandCidr("10.0.0.250/30").Select(x => x.ToString()).ToList();
-        Assert.Equal(new[] { "10.0.0.250", "10.0.0.251", "10.0.0.252", "10.0.0.253" }, ips);
+        Assert.Equal(new[] { "10.0.0.248", "10.0.0.249", "10.0.0.250", "10.0.0.251" }, ips);
+    }
+
+    [Fact, Trait("Category", "Unit")]
+    public void ExpandCidr_NormalizesHostBitsForLargerAndSlashZeroNetworks()
+    {
+        Assert.Equal("1.2.3.0", NetUtils.ExpandCidr("1.2.3.5/24").First().ToString());
+        Assert.Equal("0.0.0.0", NetUtils.ExpandCidr("1.2.3.5/0").First().ToString());
     }
 
     [Fact, Trait("Category", "Unit")]

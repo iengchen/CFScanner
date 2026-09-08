@@ -38,7 +38,7 @@ public sealed class InputLoaderTests
         var result = await InputLoader.LoadTargetsAsync();
 
         Assert.False(result.IsInfinite);
-        Assert.Equal(new[] { "192.0.2.3", "192.0.2.4" },
+        Assert.Equal(new[] { "192.0.2.2", "192.0.2.3" },
             result.Source.Select(x => x.ToString()));
     }
 }

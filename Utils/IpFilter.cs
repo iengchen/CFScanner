@@ -93,12 +93,15 @@ public class IpFilter
     /// </summary>
     private static void AddRange(List<(uint, uint)> list, IPAddress ip, int mask)
     {
+        if (mask < 0 || mask > 32)
+            return;
+
         byte[] b = ip.GetAddressBytes();
         uint ipVal = BinaryPrimitives.ReadUInt32BigEndian(b);
-        uint count = mask == 0 ? 0xFFFFFFFF : (uint)(1ul << (32 - mask));
-        uint end = ipVal + count - 1;
-        if (count == 0xFFFFFFFF) end = 0xFFFFFFFF;
-        list.Add((ipVal, end));
+        uint networkMask = mask == 0 ? 0U : uint.MaxValue << (32 - mask);
+        uint start = ipVal & networkMask;
+        uint end = start | ~networkMask;
+        list.Add((start, end));
     }
 
     /// <summary>

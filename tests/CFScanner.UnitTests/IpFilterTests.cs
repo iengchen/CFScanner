@@ -95,6 +95,17 @@ public sealed class IpFilterTests
     }
 
     [Fact, Trait("Category", "Unit")]
+    public async Task BuildAsync_NormalizesCidrHostBits()
+    {
+        TestState.Reset();
+        await GlobalContext.IpFilter.BuildAsync([], ["1.2.3.5/30"], [], "missing.tsv");
+
+        Assert.True(GlobalContext.IpFilter.IsBlocked(IPAddress.Parse("1.2.3.4")));
+        Assert.True(GlobalContext.IpFilter.IsBlocked(IPAddress.Parse("1.2.3.7")));
+        Assert.False(GlobalContext.IpFilter.IsBlocked(IPAddress.Parse("1.2.3.8")));
+    }
+
+    [Fact, Trait("Category", "Unit")]
     public async Task BuildAsync_NoAsnDbSkipsAsnProcessing()
     {
         TestState.Reset();

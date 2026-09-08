@@ -47,7 +47,9 @@ public static class NetUtils
         if (BitConverter.IsLittleEndian)
             Array.Reverse(bytes);
 
-        uint start = BitConverter.ToUInt32(bytes, 0);
+        uint ipValue = BitConverter.ToUInt32(bytes, 0);
+        uint networkMask = mask == 0 ? 0U : uint.MaxValue << (32 - mask);
+        uint start = ipValue & networkMask;
 
         // ---------------------------------------------------------------------
         // 3) CIDR expansion with safety cap

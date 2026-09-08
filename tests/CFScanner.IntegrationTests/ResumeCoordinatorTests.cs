@@ -88,7 +88,7 @@ public sealed class ResumeCoordinatorTests
             await ResumeCoordinator.InitializeAsync(assumeYes: true);
             var loaded = await InputLoader.LoadTargetsAsync();
 
-            Assert.Equal(new[] { "192.0.2.3", "192.0.2.4" },
+            Assert.Equal(new[] { "192.0.2.2", "192.0.2.3" },
                 loaded.Source.Select(x => x.ToString()));
         }
         finally
