@@ -163,6 +163,21 @@ public sealed class ResumeCheckpointTests
     }
 
     [Fact, Trait("Category", "Unit")]
+    public async Task Fingerprint_DistinguishesXrayTimeouts()
+    {
+        var first = new Config { V2RayConfigPath = "xray.json" };
+        var second = new Config
+        {
+            V2RayConfigPath = "xray.json",
+            XrayConnectionTimeoutMs = Defaults.XrayConnectionTimeoutMs + 1
+        };
+
+        Assert.NotEqual(
+            await ScanConfigurationFingerprint.Compute(first, true),
+            await ScanConfigurationFingerprint.Compute(second, true));
+    }
+
+    [Fact, Trait("Category", "Unit")]
     public void DeterministicGenerator_SnapshotIsConsistent()
     {
         var generator = new DeterministicRandomIpv4Generator(1234);

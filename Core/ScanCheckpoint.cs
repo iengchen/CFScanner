@@ -281,7 +281,7 @@ public static class ScanConfigurationFingerprint
             $"v2ray={v2ray}",
             $"speed={config.MinDownloadSpeedKb},{config.MinUploadSpeedKb}",
             $"workers={config.TcpWorkers},{config.SignatureWorkers},{config.V2RayWorkers},{config.SpeedTestWorkers}",
-            $"timeouts={config.TcpTimeoutMs},{config.TlsTimeoutMs},{config.HttpReadTimeoutMs},{config.SignatureTotalTimeoutMs}"
+            $"timeouts={config.TcpTimeoutMs},{config.TlsTimeoutMs},{config.HttpReadTimeoutMs},{config.SignatureTotalTimeoutMs},{config.XrayStartupTimeoutMs},{config.XrayConnectionTimeoutMs},{config.XrayProcessKillTimeoutMs}"
         });
         return canonical.Split('\n');
     }
