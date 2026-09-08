@@ -103,6 +103,28 @@ public sealed class GlobalContextCounterTests
     }
 
     [Fact, Trait("Category", "Unit")]
+    public void RestoreCounters_PreservesValuesBeyondInt32MaxValue()
+    {
+        TestState.Reset();
+        const long large = (long)int.MaxValue + 42;
+
+        GlobalContext.RestoreCounters(new CheckpointStats
+        {
+            Scanned = large,
+            TcpOpen = large,
+            SignaturePassed = large,
+            V2RayPassed = large,
+            SpeedTestPassed = large
+        });
+
+        Assert.Equal(large, GlobalContext.ScannedCount);
+        Assert.Equal(large, GlobalContext.TcpOpenTotal);
+        Assert.Equal(large, GlobalContext.SignaturePassed);
+        Assert.Equal(large, GlobalContext.V2RayPassed);
+        Assert.Equal(large, GlobalContext.SpeedTestPassed);
+    }
+
+    [Fact, Trait("Category", "Unit")]
     public void TotalIpsAndModeRoundTrip()
     {
         TestState.Reset();

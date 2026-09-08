@@ -55,11 +55,11 @@ public static class GlobalContext
     private static long _totalIps;
 
     // Concurrent scan statistics
-    private static int _scannedCount;
+    private static long _scannedCount;
     private static long _tcpOpenTotal;
-    private static int _signaturePassed;
-    private static int _v2RayPassed;
-    private static int _speedTestPassed;
+    private static long _signaturePassed;
+    private static long _v2RayPassed;
+    private static long _speedTestPassed;
 
     // Scan mode flags and shared immutable resources
     private static bool _isInfiniteMode;
@@ -106,7 +106,7 @@ public static class GlobalContext
     /// Total number of IPs that completed scanning,
     /// regardless of success or failure.
     /// </summary>
-    public static int ScannedCount => _scannedCount;
+    public static long ScannedCount => Interlocked.Read(ref _scannedCount);
 
     /// <summary>
     /// Number of IPs that successfully established a TCP connection
@@ -117,18 +117,18 @@ public static class GlobalContext
     /// <summary>
     /// Number of IPs that passed the TLS/HTTP signature validation stage.
     /// </summary>
-    public static int SignaturePassed => _signaturePassed;
+    public static long SignaturePassed => Interlocked.Read(ref _signaturePassed);
 
     /// <summary>
     /// Number of IPs that passed real Xray/V2Ray proxy verification.
     /// </summary>
-    public static int V2RayPassed => _v2RayPassed;
+    public static long V2RayPassed => Interlocked.Read(ref _v2RayPassed);
 
     /// <summary>
     /// Number of IPs that passed the speed test stage
     /// (after real proxy verification).
     /// </summary>
-    public static int SpeedTestPassed => _speedTestPassed;
+    public static long SpeedTestPassed => Interlocked.Read(ref _speedTestPassed);
 
     /// <summary>
     /// Indicates whether the scanner is running in infinite random-IP mode.
@@ -196,11 +196,11 @@ public static class GlobalContext
     /// </summary>
     public static void ResetCounters()
     {
-        Interlocked.Exchange(ref _scannedCount, 0);
+        Interlocked.Exchange(ref _scannedCount, 0L);
         Interlocked.Exchange(ref _tcpOpenTotal, 0);
-        Interlocked.Exchange(ref _signaturePassed, 0);
-        Interlocked.Exchange(ref _v2RayPassed, 0);
-        Interlocked.Exchange(ref _speedTestPassed, 0);
+        Interlocked.Exchange(ref _signaturePassed, 0L);
+        Interlocked.Exchange(ref _v2RayPassed, 0L);
+        Interlocked.Exchange(ref _speedTestPassed, 0L);
         lock (ResumeProgressLock)
         {
             CompletedSequences.Clear();
@@ -286,11 +286,11 @@ public static class GlobalContext
     /// <param name="stats">Checkpoint statistics to restore.</param>
     public static void RestoreCounters(CheckpointStats stats)
     {
-        Interlocked.Exchange(ref _scannedCount, (int)Math.Clamp(stats.Scanned, 0, int.MaxValue));
+        Interlocked.Exchange(ref _scannedCount, Math.Max(0, stats.Scanned));
         Interlocked.Exchange(ref _tcpOpenTotal, Math.Max(0, stats.TcpOpen));
-        Interlocked.Exchange(ref _signaturePassed, (int)Math.Clamp(stats.SignaturePassed, 0, int.MaxValue));
-        Interlocked.Exchange(ref _v2RayPassed, (int)Math.Clamp(stats.V2RayPassed, 0, int.MaxValue));
-        Interlocked.Exchange(ref _speedTestPassed, (int)Math.Clamp(stats.SpeedTestPassed, 0, int.MaxValue));
+        Interlocked.Exchange(ref _signaturePassed, Math.Max(0, stats.SignaturePassed));
+        Interlocked.Exchange(ref _v2RayPassed, Math.Max(0, stats.V2RayPassed));
+        Interlocked.Exchange(ref _speedTestPassed, Math.Max(0, stats.SpeedTestPassed));
     }
 
     /// <summary>

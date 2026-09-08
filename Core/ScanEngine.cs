@@ -169,13 +169,8 @@ public static class ScanEngine
             var sequenceOffset = GlobalContext.IsInfiniteMode
                 ? 0
                 : GlobalContext.ResumeCursor / portCount * portCount;
-            var ipPortSource = ipSource
-                .SelectMany((ip, ipIndex) => ports.Select((port, portIndex) =>
-                    (ip, port, sequence: sequenceOffset + (long)ipIndex * portCount + portIndex)))
-                // InputLoader begins at the containing IP when resuming.  A
-                // checkpoint may fall between that IP's ports, so skip its
-                // already-completed endpoints instead of probing them again.
-                .Where(item => item.sequence >= GlobalContext.ResumeCursor);
+            var ipPortSource = EnumerateEndpoints(
+                ipSource, ports, sequenceOffset, GlobalContext.ResumeCursor);
 
             var producerTask = Parallel.ForEachAsync(
                 ipPortSource,
@@ -285,6 +280,26 @@ public static class ScanEngine
         }
 
         return null;
+    }
+
+    private static IEnumerable<(IPAddress ip, int port, long sequence)> EnumerateEndpoints(
+        IEnumerable<IPAddress> ipSource,
+        IReadOnlyList<int> ports,
+        long sequenceOffset,
+        long resumeCursor)
+    {
+        long ipIndex = 0;
+        foreach (var ip in ipSource)
+        {
+            for (int portIndex = 0; portIndex < ports.Count; portIndex++)
+            {
+                var sequence = checked(sequenceOffset + ipIndex * ports.Count + portIndex);
+                if (sequence >= resumeCursor)
+                    yield return (ip, ports[portIndex], sequence);
+            }
+
+            ipIndex = checked(ipIndex + 1);
+        }
     }
 
     private static void DrainTcpConnections(ChannelReader<ScannerWorkers.LiveConnection> reader)
