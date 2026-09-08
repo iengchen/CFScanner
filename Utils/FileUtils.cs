@@ -177,9 +177,16 @@ public static class FileUtils
 
                 var cleanPart = span.ToString();
                 if (cleanPart.Contains('/'))
-                    list.AddRange(NetUtils.ExpandCidr(cleanPart));
-                else if (IPAddress.TryParse(cleanPart, out var ip))
+                {
+                    if (NetUtils.TryParseIpv4Cidr(cleanPart, out _, out _))
+                        list.AddRange(NetUtils.ExpandCidr(cleanPart));
+                    else
+                        CFScanner.UI.ConsoleInterface.PrintWarning($"Invalid IPv4 CIDR in input file '{path}': {cleanPart}");
+                }
+                else if (NetUtils.TryParseIpv4(cleanPart, out var ip))
                     list.Add(ip);
+                else
+                    CFScanner.UI.ConsoleInterface.PrintWarning($"Invalid IPv4 address in input file '{path}': {cleanPart}");
             }
         });
         return list;

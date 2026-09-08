@@ -43,19 +43,21 @@ public class IpFilter
                     ct.ThrowIfCancellationRequested();
                     var s = line.Trim();
                     if (string.IsNullOrEmpty(s) || s.StartsWith("#")) continue;
-                    var parts = s.Split('#')[0].Trim().Split('/');
-                    if (parts.Length != 2) continue;
-                    if (IPAddress.TryParse(parts[0], out var ip) && int.TryParse(parts[1], out int mask))
+                    var cidr = s.Split('#')[0].Trim();
+                    if (NetUtils.TryParseIpv4Cidr(cidr, out var ip, out int mask))
                         AddRange(temp, ip, mask);
+                    else
+                        CFScanner.UI.ConsoleInterface.PrintWarning($"Invalid IPv4 CIDR exclusion in '{path}': {cidr}");
                 }
             }
 
             foreach (var c in cidrs)
             {
                 ct.ThrowIfCancellationRequested();
-                var parts = c.Split('/');
-                if (parts.Length == 2 && IPAddress.TryParse(parts[0], out var ip) && int.TryParse(parts[1], out int mask))
+                if (NetUtils.TryParseIpv4Cidr(c, out var ip, out int mask))
                     AddRange(temp, ip, mask);
+                else
+                    CFScanner.UI.ConsoleInterface.PrintWarning($"Invalid IPv4 CIDR exclusion: {c}");
             }
 
             if (asns.Count > 0 && File.Exists(asnDbPath))

@@ -120,7 +120,7 @@ public static class InputLoader
                 foreach (var part in parts)
                 {
                     // Single IP
-                    if (IPAddress.TryParse(part, out var singleIp))
+                    if (NetUtils.TryParseIpv4(part, out var singleIp))
                     {
                         inputIps.Add(NetUtils.IpToUint(singleIp));
                         continue;

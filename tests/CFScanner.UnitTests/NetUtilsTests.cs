@@ -36,6 +36,17 @@ public sealed class NetUtilsTests
         Assert.Empty(NetUtils.ExpandCidr("192.0.2.0/33"));
         Assert.Empty(NetUtils.ExpandCidr("not-an-ip/24"));
         Assert.Empty(NetUtils.ExpandCidr("192.0.2.0/-1"));
+        Assert.Empty(NetUtils.ExpandCidr("::1"));
+        Assert.Empty(NetUtils.ExpandCidr("::1/128"));
+    }
+
+    [Theory, Trait("Category", "Unit")]
+    [InlineData("::1/128")]
+    [InlineData("1.2.3.4/33")]
+    [InlineData("1.2.3.4/-1")]
+    public void TryParseIpv4Cidr_RejectsNonIpv4AndInvalidPrefixes(string input)
+    {
+        Assert.False(NetUtils.TryParseIpv4Cidr(input, out _, out _));
     }
 
     [Fact, Trait("Category", "Unit")]

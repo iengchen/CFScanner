@@ -25,6 +25,7 @@ public sealed class IpFilterTests
             "10.0.0.0/8 # private\n" +
             "\n" +
             "not-an-ip/24\n" +
+            "::1/128\n" +
             "192.0.2.0\n" +          // missing /mask -> skipped (treated as single IP without mask)
             "192.0.2.0/99\n" +        // bad mask
             "192.0.2.128/25\n");      // valid

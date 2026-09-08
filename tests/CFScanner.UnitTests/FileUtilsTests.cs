@@ -178,6 +178,8 @@ public sealed class FileUtilsTests : IDisposable
         await File.WriteAllTextAsync(path,
             "# comment line\n" +
             "192.0.2.1\n" +
+            "::1\n" +
+            "::1/128\n" +
             "   \n" +
             "192.0.2.10/31\n" +
             "  192.0.2.5 # inline comment\n");
@@ -190,6 +192,7 @@ public sealed class FileUtilsTests : IDisposable
         Assert.Contains("192.0.2.10", set);
         Assert.Contains("192.0.2.11", set);
         Assert.DoesNotContain("not-an-ip", set);
+        Assert.DoesNotContain("::1", set);
     }
 
     [Fact, Trait("Category", "Unit")]

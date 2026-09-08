@@ -35,6 +35,19 @@ public sealed class InputLoaderTests
     }
 
     [Fact, Trait("Category", "Unit")]
+    public async Task LoadTargetsAsync_InvalidIpv6InputsAreRejected()
+    {
+        TestState.Reset();
+        GlobalContext.Config.InputCidrs.Add("::1");
+        GlobalContext.Config.InputCidrs.Add("::1/128");
+
+        var (_, total, infinite) = await InputLoader.LoadTargetsAsync();
+
+        Assert.False(infinite);
+        Assert.Equal(0, total);
+    }
+
+    [Fact, Trait("Category", "Unit")]
     public async Task LoadTargetsAsync_FileWithSingleIPsAndCidrsIsExpanded()
     {
         TestState.Reset();

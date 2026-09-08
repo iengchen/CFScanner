@@ -2,6 +2,7 @@
 using System.Buffers.Binary;
 using CFScanner.Core;
 using System.Net;
+using System.Net.Sockets;
 
 namespace CFScanner.Utils;
 
@@ -10,6 +11,34 @@ namespace CFScanner.Utils;
 /// </summary>
 public static class NetUtils
 {
+    /// <summary>Parses an IPv4 address and rejects IPv6 addresses.</summary>
+    public static bool TryParseIpv4(string input, out IPAddress ip)
+    {
+        if (IPAddress.TryParse(input, out var parsed) &&
+            parsed.AddressFamily == AddressFamily.InterNetwork)
+        {
+            ip = parsed;
+            return true;
+        }
+
+        ip = IPAddress.None;
+        return false;
+    }
+
+    /// <summary>Parses an IPv4 CIDR and validates that its prefix is in the 0–32 range.</summary>
+    public static bool TryParseIpv4Cidr(string input, out IPAddress ip, out int mask)
+    {
+        var parts = input.Split('/');
+        if (parts.Length == 2 &&
+            TryParseIpv4(parts[0], out ip) &&
+            int.TryParse(parts[1], out mask) &&
+            mask is >= 0 and <= 32)
+            return true;
+
+        ip = IPAddress.None;
+        mask = 0;
+        return false;
+    }
   
     /// <summary>
     /// Expands a CIDR notation string or single IPv4 address into an enumerable of IP addresses.
@@ -25,7 +54,7 @@ public static class NetUtils
         // ---------------------------------------------------------------------
         // If the input is a valid IPv4 address, return it directly
         // and skip CIDR expansion logic.
-        if (IPAddress.TryParse(input, out var singleIp))
+        if (TryParseIpv4(input, out var singleIp))
         {
             yield return singleIp;
             yield break;
@@ -35,11 +64,7 @@ public static class NetUtils
         // 2) CIDR parsing and validation
         // ---------------------------------------------------------------------
         // Expected format: <IPv4>/<mask>
-        var parts = input.Split('/');
-        if (parts.Length != 2 ||
-            !IPAddress.TryParse(parts[0], out var ip) ||
-            !int.TryParse(parts[1], out int mask) ||
-            mask < 0 || mask > 32)
+        if (!TryParseIpv4Cidr(input, out var ip, out int mask))
             yield break;
 
         // Convert IP to uint for arithmetic operations
