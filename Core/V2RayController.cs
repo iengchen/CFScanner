@@ -535,8 +535,15 @@ public static class V2RayController
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
 
-            await process.WaitForExitAsync().WaitAsync(
-                TimeSpan.FromMilliseconds(GlobalContext.Config.XrayProcessKillTimeoutMs));
+            if (!await WaitForExitWithinTimeoutAsync(process))
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+
+                if (!await WaitForExitWithinTimeoutAsync(process))
+                    ConsoleInterface.PrintWarning(
+                        $"Xray process {process.Id} did not exit after repeated termination attempts.");
+            }
         }
         catch (InvalidOperationException) { }
         catch (TimeoutException) { }
@@ -544,6 +551,20 @@ public static class V2RayController
         finally
         {
             process.Dispose();
+        }
+    }
+
+    private static async Task<bool> WaitForExitWithinTimeoutAsync(Process process)
+    {
+        try
+        {
+            await process.WaitForExitAsync().WaitAsync(
+                TimeSpan.FromMilliseconds(GlobalContext.Config.XrayProcessKillTimeoutMs));
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return process.HasExited;
         }
     }
 
