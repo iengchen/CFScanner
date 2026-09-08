@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Net;
 using CFScanner.Core;
 using CFScanner.Utils;
 
@@ -69,6 +70,11 @@ public static class GlobalContext
     private static readonly object ResumeProgressLock = new();
     private static readonly SortedSet<long> CompletedSequences = [];
     private static long _nextContiguousSequence;
+    private static readonly object InfiniteResumeLock = new();
+    private static readonly Queue<IPAddress> InfinitePendingIps = [];
+    private static List<IPAddress> _infiniteReplayIps = [];
+    private static int _infiniteReplayIndex;
+    private static long _infiniteCommittedIps;
     /// <summary>Active deterministic random IPv4 generator for infinite-mode scans.</summary>
     public static DeterministicRandomIpv4Generator? ResumeGenerator { get; set; }
 
@@ -203,6 +209,77 @@ public static class GlobalContext
     }
 
     /// <summary>
+    /// Produces random infinite-mode targets while atomically recording each
+    /// issued IP. A checkpoint can therefore replay targets that were issued
+    /// to the pipeline but had not yet completed.
+    /// </summary>
+    public static IEnumerable<IPAddress> GenerateResumableInfiniteIps()
+    {
+        while (true)
+        {
+            IPAddress ip;
+            lock (InfiniteResumeLock)
+            {
+                if (_infiniteReplayIndex < _infiniteReplayIps.Count)
+                {
+                    ip = _infiniteReplayIps[_infiniteReplayIndex++];
+                }
+                else
+                {
+                    if (ResumeGenerator is null)
+                        throw new InvalidOperationException("Resume generator is not initialized.");
+
+                    ip = NetUtils.UintToIp(ResumeGenerator.NextPublic(IpFilter));
+                    InfinitePendingIps.Enqueue(ip);
+                }
+            }
+
+            yield return ip;
+        }
+    }
+
+    /// <summary>
+    /// Restores unfinished infinite-mode targets from a checkpoint. They are
+    /// yielded before new generator values and remain tracked until completion.
+    /// </summary>
+    public static void RestoreInfinitePendingIps(IEnumerable<string> ips)
+    {
+        lock (InfiniteResumeLock)
+        {
+            InfinitePendingIps.Clear();
+            _infiniteReplayIps = [];
+            _infiniteReplayIndex = 0;
+            _infiniteCommittedIps = 0;
+
+            foreach (var value in ips)
+            {
+                if (!NetUtils.TryParseIpv4(value, out var ip))
+                    continue;
+                InfinitePendingIps.Enqueue(ip);
+                _infiniteReplayIps.Add(ip);
+            }
+        }
+    }
+
+    /// <summary>Clears in-memory infinite-resume state for a new scan or test.</summary>
+    public static void ResetInfiniteResumeState() => RestoreInfinitePendingIps([]);
+
+    /// <summary>Captures generator and unfinished-target state as one atomic checkpoint snapshot.</summary>
+    public static (ulong Seed, ulong State, long ValuesConsumed, long Rejections, string[] PendingIps)
+        CaptureInfiniteResumeState()
+    {
+        lock (InfiniteResumeLock)
+        {
+            if (ResumeGenerator is null)
+                throw new InvalidOperationException("Resume generator is not initialized.");
+
+            var snapshot = ResumeGenerator.Snapshot();
+            return (snapshot.Seed, snapshot.State, snapshot.ValuesConsumed,
+                snapshot.Rejections, [.. InfinitePendingIps.Select(ip => ip.ToString())]);
+        }
+    }
+
+    /// <summary>
     /// Restores scan counters from a checkpoint to resume aggregate statistics.
     /// Values are clamped to valid ranges to prevent overflow.
     /// </summary>
@@ -260,6 +337,23 @@ public static class GlobalContext
             CompletedSequences.Add(sequence);
             while (CompletedSequences.Remove(_nextContiguousSequence))
                 Interlocked.Increment(ref _nextContiguousSequence);
+        }
+
+        if (IsInfiniteMode)
+            MarkInfiniteIpsCommitted();
+    }
+
+    private static void MarkInfiniteIpsCommitted()
+    {
+        var portCount = Math.Max(1, Config.Ports.Count);
+        var completedIps = NextContiguousSequence / portCount;
+        lock (InfiniteResumeLock)
+        {
+            while (_infiniteCommittedIps < completedIps && InfinitePendingIps.Count > 0)
+            {
+                InfinitePendingIps.Dequeue();
+                _infiniteCommittedIps++;
+            }
         }
     }
 

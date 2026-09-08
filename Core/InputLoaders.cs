@@ -211,8 +211,8 @@ public static class InputLoader
         if (GlobalContext.Config.ResumeEnabled && GlobalContext.ResumeGenerator is null)
             GlobalContext.ResumeGenerator = new DeterministicRandomIpv4Generator(
                 (ulong)Random.Shared.NextInt64());
-        return (GlobalContext.ResumeGenerator is { } generator
-            ? NetUtils.GenerateRandomIps(generator)
+        return (GlobalContext.ResumeGenerator is not null
+            ? GlobalContext.GenerateResumableInfiniteIps()
             : NetUtils.GenerateRandomIps(), -1, true);
     }
 

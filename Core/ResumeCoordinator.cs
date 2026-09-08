@@ -148,8 +148,11 @@ public static class ResumeCoordinator
             GlobalContext.ResumeCursor = selected.Finite?.NextContiguousSequence ?? 0;
             GlobalContext.ResumeShuffleSeed = selected.Finite?.ShuffleSeed ?? 0;
             if (selected.Infinite is { } infinite)
+            {
                 GlobalContext.ResumeGenerator = new DeterministicRandomIpv4Generator(
                     infinite.Seed, infinite.State, infinite.ValuesConsumed, infinite.Rejections);
+                GlobalContext.RestoreInfinitePendingIps(infinite.PendingIps);
+            }
             GlobalContext.ResumeCheckpointPath = ScanCheckpointStore.GetPath(dir, selected.SessionId);
             if (!string.IsNullOrWhiteSpace(selected.ResultsPath))
             {
@@ -177,6 +180,7 @@ public static class ResumeCoordinator
             GlobalContext.ResumeCursor = 0;
             GlobalContext.ResumeShuffleSeed = (ulong)Random.Shared.NextInt64();
             GlobalContext.ResumeCheckpointPath = ScanCheckpointStore.GetPath(dir, Current.SessionId);
+            GlobalContext.ResetInfiniteResumeState();
         }
         GlobalContext.InitializeResumeProgress(GlobalContext.ResumeCursor);
         var lockPath = GlobalContext.ResumeCheckpointPath + ".lock";
@@ -254,11 +258,12 @@ public static class ResumeCoordinator
         Current.Mode = GlobalContext.IsInfiniteMode ? "infinite" : "finite";
         if (GlobalContext.IsInfiniteMode && GlobalContext.ResumeGenerator is { } generator)
         {
-            var snapshot = generator.Snapshot();
+            var snapshot = GlobalContext.CaptureInfiniteResumeState();
             Current.Infinite = new InfiniteCheckpointState
             {
                 Seed = snapshot.Seed, State = snapshot.State,
-                ValuesConsumed = snapshot.ValuesConsumed, Rejections = snapshot.Rejections
+                ValuesConsumed = snapshot.ValuesConsumed, Rejections = snapshot.Rejections,
+                PendingIps = snapshot.PendingIps
             };
             Current.Finite = null;
         }

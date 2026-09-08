@@ -50,6 +50,7 @@ internal static class TestState
         GlobalContext.ResumeCursor = 0;
         GlobalContext.ResumeShuffleSeed = 0;
         GlobalContext.ResumeGenerator = null;
+        GlobalContext.ResetInfiniteResumeState();
         GlobalContext.ResumeCheckpointPath = string.Empty;
         GlobalContext.RawV2RayTemplate = string.Empty;
         GlobalContext.IpFilter.Clear();

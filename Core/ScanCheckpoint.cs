@@ -168,6 +168,8 @@ public sealed class InfiniteCheckpointState
     public long ValuesConsumed { get; set; }
     /// <summary>Number of candidate IPs rejected (private/reserved/blocked).</summary>
     public long Rejections { get; set; }
+    /// <summary>Issued IPs that had not completed when the checkpoint was saved.</summary>
+    public string[] PendingIps { get; set; } = [];
 }
 
 /// <summary>
@@ -423,6 +425,7 @@ public static class ScanCheckpointStore
                checkpoint.Infinite.Seed != 0 && checkpoint.Infinite.State != 0 &&
                checkpoint.Infinite.ValuesConsumed >= 0 &&
                checkpoint.Infinite.Rejections >= 0 &&
+               checkpoint.Infinite.PendingIps.All(ip => NetUtils.TryParseIpv4(ip, out _)) &&
                checkpoint.Infinite.Generator == DeterministicRandomIpv4Generator.Algorithm;
     }
 

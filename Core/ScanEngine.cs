@@ -162,7 +162,9 @@ public static class ScanEngine
         {
             var ports = GlobalContext.Config.Ports;
             var portCount = Math.Max(1, ports.Count);
-            var sequenceOffset = GlobalContext.ResumeCursor / portCount * portCount;
+            var sequenceOffset = GlobalContext.IsInfiniteMode
+                ? 0
+                : GlobalContext.ResumeCursor / portCount * portCount;
             var ipPortSource = ipSource
                 .SelectMany((ip, ipIndex) => ports.Select((port, portIndex) =>
                     (ip, port, sequence: sequenceOffset + (long)ipIndex * portCount + portIndex)))
