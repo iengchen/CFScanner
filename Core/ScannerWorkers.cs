@@ -264,7 +264,10 @@ public static class ScannerWorkers
                 while (reader.TryRead(out var item))
                 {
                     if (ct.IsCancellationRequested)
-                        break;
+                    {
+                        await V2RayController.TerminateProcessAsync(item.XrayProcess);
+                        continue;
+                    }
                     await PauseManager.WaitIfPausedAsync(ct);
 
                     await V2RayController.RunSpeedTestAsync(
@@ -282,6 +285,11 @@ public static class ScannerWorkers
             }
         }
         catch (OperationCanceledException) { }
+        finally
+        {
+            while (reader.TryRead(out var item))
+                await V2RayController.TerminateProcessAsync(item.XrayProcess);
+        }
     }
 
     // ---------------------------------------------------------------------

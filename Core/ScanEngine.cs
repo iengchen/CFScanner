@@ -199,6 +199,7 @@ public static class ScanEngine
         // This guarantees no pipeline/Xray task outlives ScanEngine shutdown.
         tcpChannel.Writer.TryComplete();
         await AwaitWorkersAsync(signatureTasks);
+        DrainTcpConnections(tcpChannel.Reader);
 
         if (v2rayChannel != null)
         {
@@ -210,6 +211,7 @@ public static class ScanEngine
         {
             speedTestChannel.Writer.TryComplete();
             await AwaitWorkersAsync(speedTestTasks);
+            await DrainSpeedTestRequestsAsync(speedTestChannel.Reader);
         }
 
         // Explicitly terminate UI monitoring after normal completion.
@@ -231,5 +233,17 @@ public static class ScanEngine
     {
         try { await Task.WhenAll(workers); }
         catch (OperationCanceledException) { }
+    }
+
+    private static void DrainTcpConnections(ChannelReader<ScannerWorkers.LiveConnection> reader)
+    {
+        while (reader.TryRead(out var item))
+            item.Client.Dispose();
+    }
+
+    private static async Task DrainSpeedTestRequestsAsync(ChannelReader<ScannerWorkers.SpeedTestRequest> reader)
+    {
+        while (reader.TryRead(out var item))
+            await V2RayController.TerminateProcessAsync(item.XrayProcess);
     }
 }

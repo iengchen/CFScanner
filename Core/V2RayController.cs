@@ -200,24 +200,7 @@ public static class V2RayController
         {
             if (!processOwnershipTransferred && xrayProcess != null)
             {
-                try
-                {
-                    if (!xrayProcess.HasExited)
-                    {
-                        xrayProcess.Kill();
-                        try
-                        {
-                            await xrayProcess.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromMilliseconds(GlobalContext.Config.XrayProcessKillTimeoutMs), ct);
-                        }
-                        catch (OperationCanceledException) { }
-                        catch (TimeoutException) { }
-                    }
-                }
-                catch { }
-                finally
-                {
-                    xrayProcess.Dispose();
-                }
+                await TerminateProcessAsync(xrayProcess);
             }
         }
     }
@@ -301,24 +284,7 @@ public static class V2RayController
         finally
         {
             // Consumer stage owns and must clean up the process
-            if (xrayProcess != null)
-            {
-                if (!xrayProcess.HasExited)
-                {
-                    try
-                    {
-                        xrayProcess.Kill();
-                        try
-                        {
-                            await xrayProcess.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromMilliseconds(GlobalContext.Config.XrayProcessKillTimeoutMs), ct);
-                        }
-                        catch (OperationCanceledException) { }
-                        catch (TimeoutException) { }
-                    }
-                    catch { }
-                }
-                xrayProcess.Dispose();
-            }
+            await TerminateProcessAsync(xrayProcess);
         }
     }
 
@@ -537,6 +503,29 @@ public static class V2RayController
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>Terminates and disposes an Xray process without relying on a canceled pipeline token.</summary>
+    public static async Task TerminateProcessAsync(Process? process)
+    {
+        if (process is null)
+            return;
+
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+
+            await process.WaitForExitAsync().WaitAsync(
+                TimeSpan.FromMilliseconds(GlobalContext.Config.XrayProcessKillTimeoutMs));
+        }
+        catch (InvalidOperationException) { }
+        catch (TimeoutException) { }
+        catch (System.ComponentModel.Win32Exception) { }
+        finally
+        {
+            process.Dispose();
         }
     }
 
