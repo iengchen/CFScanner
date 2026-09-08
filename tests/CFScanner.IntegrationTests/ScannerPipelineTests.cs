@@ -153,6 +153,34 @@ public sealed class ScannerPipelineTests : IDisposable
         await server.Completion.WaitAsync(TestContext.Current.CancellationToken);
     }
 
+    [Fact(Timeout = 10_000), Trait("Category", "Integration")]
+    public async Task ScanEngine_ResumeBetweenPorts_SkipsCompletedEndpoint()
+    {
+        await using var firstServer = await TlsResponseServer.StartAsync(
+            "HTTP/1.1 200 OK\r\nserver: cloudflare\r\ncf-ray: first\r\n\r\n",
+            connectionCount: 0);
+        await using var secondServer = await TlsResponseServer.StartAsync(
+            "HTTP/1.1 200 OK\r\nserver: cloudflare\r\ncf-ray: second\r\n\r\n",
+            connectionCount: 1);
+        GlobalContext.Config.Ports = [firstServer.Port, secondServer.Port];
+        GlobalContext.Config.TcpWorkers = 1;
+        GlobalContext.Config.SignatureWorkers = 1;
+        GlobalContext.Config.TcpChannelBuffer = 1;
+        GlobalContext.Config.SaveLatency = false;
+        GlobalContext.ResumeCursor = 1;
+        GlobalContext.InitializeResumeProgress(1);
+        GlobalContext.OutputFilePath = Path.Combine(_tempDir, "resume-between-ports.txt");
+
+        await ScanEngine.RunScanAsync([IPAddress.Loopback]);
+
+        Assert.Equal(1, GlobalContext.TcpOpenTotal);
+        Assert.Equal(1, GlobalContext.SignaturePassed);
+        Assert.Equal(1, GlobalContext.ScannedCount);
+        Assert.Equal("127.0.0.1:" + secondServer.Port,
+            File.ReadAllText(GlobalContext.OutputFilePath).Trim());
+        await secondServer.Completion.WaitAsync(TestContext.Current.CancellationToken);
+    }
+
     private sealed class TlsResponseServer : IAsyncDisposable
     {
         private readonly TcpListener _listener;

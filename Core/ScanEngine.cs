@@ -161,11 +161,15 @@ public static class ScanEngine
         try
         {
             var ports = GlobalContext.Config.Ports;
-            var sequenceOffset = GlobalContext.ResumeCursor / Math.Max(1, ports.Count) *
-                Math.Max(1, ports.Count);
+            var portCount = Math.Max(1, ports.Count);
+            var sequenceOffset = GlobalContext.ResumeCursor / portCount * portCount;
             var ipPortSource = ipSource
                 .SelectMany((ip, ipIndex) => ports.Select((port, portIndex) =>
-                    (ip, port, sequence: sequenceOffset + (long)ipIndex * ports.Count + portIndex)));
+                    (ip, port, sequence: sequenceOffset + (long)ipIndex * portCount + portIndex)))
+                // InputLoader begins at the containing IP when resuming.  A
+                // checkpoint may fall between that IP's ports, so skip its
+                // already-completed endpoints instead of probing them again.
+                .Where(item => item.sequence >= GlobalContext.ResumeCursor);
 
             await Parallel.ForEachAsync(
                 ipPortSource,
