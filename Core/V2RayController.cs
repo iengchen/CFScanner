@@ -47,6 +47,7 @@ public static class V2RayController
     public static async Task<bool> ValidateXrayConfigAsync(string configPath)
     {
         Console.WriteLine($"[Init] Validating Xray config: {Path.GetFileName(configPath)}");
+        Process? process = null;
         try
         {
             var psi = new ProcessStartInfo
@@ -59,12 +60,18 @@ public static class V2RayController
                 CreateNoWindow = true
             };
 
-            using var process = Process.Start(psi);
+            process = Process.Start(psi);
             if (process == null) return false;
 
-            string output = await process.StandardOutput.ReadToEndAsync();
-            string error = await process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
+            using var validationCts = new CancellationTokenSource(
+                TimeSpan.FromMilliseconds(GlobalContext.Config.XrayStartupTimeoutMs));
+            var outputTask = process.StandardOutput.ReadToEndAsync(validationCts.Token);
+            var errorTask = process.StandardError.ReadToEndAsync(validationCts.Token);
+            await process.WaitForExitAsync(validationCts.Token);
+            await Task.WhenAll(outputTask, errorTask);
+
+            string output = await outputTask;
+            string error = await errorTask;
 
             string fullLog = output + Environment.NewLine + error;
 
@@ -82,10 +89,21 @@ public static class V2RayController
             Console.ResetColor();
             return false;
         }
+        catch (OperationCanceledException)
+        {
+            await TerminateProcessAsync(process);
+            ConsoleInterface.PrintError("Xray configuration validation timed out.");
+            return false;
+        }
         catch (Exception ex)
         {
+            await TerminateProcessAsync(process);
             ConsoleInterface.PrintError($"Failed to run Xray configuration validation: {ex.Message}");
             return false;
+        }
+        finally
+        {
+            process?.Dispose();
         }
     }
 
