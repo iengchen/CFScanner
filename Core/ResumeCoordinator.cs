@@ -201,9 +201,12 @@ public static class ResumeCoordinator
             try
             {
                 var pidText = await ReadLockPidAsync(lockPath, token);
-                stale = !int.TryParse(pidText, out var pid) || !IsProcessRunning(pid);
+                // A competing instance can observe the file after CreateNew
+                // but before this process has flushed its PID. Treat a blank
+                // or malformed lock as owned rather than deleting it.
+                stale = int.TryParse(pidText, out var pid) && !IsProcessRunning(pid);
             }
-            catch { stale = true; }
+            catch { stale = false; }
             if (!stale)
             {
                 ConsoleInterface.PrintError("[Resume] Another scanner instance owns this session.");
