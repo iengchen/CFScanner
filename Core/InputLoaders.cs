@@ -59,7 +59,7 @@ public static class InputLoader
     /// </list>
     /// </returns>
     public static async Task<(IEnumerable<IPAddress> Source, long Total, bool IsInfinite)>
-     LoadTargetsAsync()
+     LoadTargetsAsync(CancellationToken ct = default)
     {
         var inputIps = new List<uint>();   // 4 bytes per entry instead of ~48-64
         bool specificInputProvided = false;
@@ -73,8 +73,9 @@ public static class InputLoader
 
             foreach (var file in GlobalContext.Config.InputFiles)
             {
+                ct.ThrowIfCancellationRequested();
                 Console.Write($"Loading file {Path.GetFileName(file)}... ");
-                foreach (var ip in await FileUtils.LoadIpsAsync(file))
+                foreach (var ip in await FileUtils.LoadIpsAsync(file, ct))
                     inputIps.Add(NetUtils.IpToUint(ip));
                 Console.WriteLine("Done.");
             }
@@ -90,9 +91,18 @@ public static class InputLoader
             Console.Write(
                 $"Loading ASNs ({string.Join(",", GlobalContext.Config.InputAsns)})... ");
 
-            var ips = await Task.Run(() => IpFilter.IpAsnSource.GetIps(
-                         GlobalContext.Config.AsnDbPath,
-                         GlobalContext.Config.InputAsns).ToList());
+            var ips = await Task.Run(() =>
+            {
+                var loaded = new List<IPAddress>();
+                foreach (var ip in IpFilter.IpAsnSource.GetIps(
+                    GlobalContext.Config.AsnDbPath,
+                    GlobalContext.Config.InputAsns))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    loaded.Add(ip);
+                }
+                return loaded;
+            }, ct);
             foreach (var ip in ips)
             {
                 inputIps.Add(NetUtils.IpToUint(ip));
@@ -112,6 +122,7 @@ public static class InputLoader
 
             foreach (var entry in GlobalContext.Config.InputCidrs)
             {
+                ct.ThrowIfCancellationRequested();
                 var parts = entry.Split(
                     ',',
                     StringSplitOptions.RemoveEmptyEntries |
@@ -119,6 +130,7 @@ public static class InputLoader
 
                 foreach (var part in parts)
                 {
+                    ct.ThrowIfCancellationRequested();
                     // Single IP
                     if (NetUtils.TryParseIpv4(part, out var singleIp))
                     {
@@ -130,6 +142,7 @@ public static class InputLoader
                     bool anyExpanded = false;
                     foreach (var ip in NetUtils.ExpandCidr(part))
                     {
+                        ct.ThrowIfCancellationRequested();
                         inputIps.Add(NetUtils.IpToUint(ip));
                         anyExpanded = true;
                     }

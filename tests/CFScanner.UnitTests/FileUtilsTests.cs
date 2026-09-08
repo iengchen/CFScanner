@@ -23,6 +23,18 @@ public sealed class FileUtilsTests : IDisposable
     }
 
     [Fact, Trait("Category", "Unit")]
+    public async Task LoadIpsAsync_ObservesCancellation()
+    {
+        var path = Path.Combine(_tempDir, "cancelled-input.txt");
+        await File.WriteAllTextAsync(path, "192.0.2.1\n");
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            FileUtils.LoadIpsAsync(path, cts.Token));
+    }
+
+    [Fact, Trait("Category", "Unit")]
     public void SetupOutputFile_AtomicallyReservesUniqueResultPaths()
     {
         var reservedPaths = new ConcurrentBag<string>();

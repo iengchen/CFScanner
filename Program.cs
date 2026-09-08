@@ -40,25 +40,37 @@ ConsoleInterface.PrintHeader();
 
 // 6. Load exclusions and scan targets
 // Builds exclusion filters first, then resolves input sources.
-await InputLoader.BuildExclusionsAsync();
-if (GlobalContext.Config.ResumeEnabled)
+IEnumerable<System.Net.IPAddress> ipSource;
+long totalIps;
+bool isInfinite;
+try
 {
-    // InputLoader's documented fallback is infinite mode only when no
-    // explicit finite source was supplied; establish that identity before
-    // selecting a checkpoint.
-    GlobalContext.IsInfiniteMode =
-        GlobalContext.Config.InputFiles.Count == 0 &&
-        GlobalContext.Config.InputAsns.Count == 0 &&
-        GlobalContext.Config.InputCidrs.Count == 0;
-    var assumeYes = args.Any(a => a.Equals("-y", StringComparison.OrdinalIgnoreCase) ||
-                                  a.Equals("--yes", StringComparison.OrdinalIgnoreCase) ||
-                                  a.Equals("--no-confirm", StringComparison.OrdinalIgnoreCase));
-    await ResumeCoordinator.InitializeAsync(assumeYes);
-    if (!GlobalContext.Config.ResumeNewScan && !assumeYes)
-        ArgParser.DisplayEffectiveConfigurationSummary();
+    await InputLoader.BuildExclusionsAsync(GlobalContext.Cts.Token);
+    if (GlobalContext.Config.ResumeEnabled)
+    {
+        // InputLoader's documented fallback is infinite mode only when no
+        // explicit finite source was supplied; establish that identity before
+        // selecting a checkpoint.
+        GlobalContext.IsInfiniteMode =
+            GlobalContext.Config.InputFiles.Count == 0 &&
+            GlobalContext.Config.InputAsns.Count == 0 &&
+            GlobalContext.Config.InputCidrs.Count == 0;
+        var assumeYes = args.Any(a => a.Equals("-y", StringComparison.OrdinalIgnoreCase) ||
+                                      a.Equals("--yes", StringComparison.OrdinalIgnoreCase) ||
+                                      a.Equals("--no-confirm", StringComparison.OrdinalIgnoreCase));
+        await ResumeCoordinator.InitializeAsync(assumeYes, GlobalContext.Cts.Token);
+        if (!GlobalContext.Config.ResumeNewScan && !assumeYes)
+            ArgParser.DisplayEffectiveConfigurationSummary();
+    }
+    (ipSource, totalIps, isInfinite) =
+        await InputLoader.LoadTargetsAsync(GlobalContext.Cts.Token);
 }
-var (ipSource, totalIps, isInfinite) =
-    await InputLoader.LoadTargetsAsync();
+catch (OperationCanceledException) when (GlobalContext.Cts.IsCancellationRequested)
+{
+    FileUtils.DeleteEmptyOutputFile();
+    if (GlobalContext.Config.ResumeEnabled) ResumeCoordinator.Dispose();
+    return;
+}
 
 // 7. Configure global scan mode
 // Used by UI, progress reporting, and final statistics.

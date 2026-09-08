@@ -264,13 +264,14 @@ public static class FileUtils
     /// </summary>
     /// <param name="path">Path to the input file.</param>
     /// <returns>List of IPAddress objects.</returns>
-    public static async Task<List<IPAddress>> LoadIpsAsync(string path)
+    public static async Task<List<IPAddress>> LoadIpsAsync(string path, CancellationToken ct = default)
     {
         var list = new List<IPAddress>();
         await Task.Run(() =>
         {
             foreach (var line in File.ReadLines(path))
             {
+                ct.ThrowIfCancellationRequested();
                 var span = line.AsSpan().Trim();
                 if (span.IsEmpty || span.StartsWith("#")) continue;
 
@@ -282,7 +283,13 @@ public static class FileUtils
                 if (cleanPart.Contains('/'))
                 {
                     if (NetUtils.TryParseIpv4Cidr(cleanPart, out _, out _))
-                        list.AddRange(NetUtils.ExpandCidr(cleanPart));
+                    {
+                        foreach (var ip in NetUtils.ExpandCidr(cleanPart))
+                        {
+                            ct.ThrowIfCancellationRequested();
+                            list.Add(ip);
+                        }
+                    }
                     else
                         CFScanner.UI.ConsoleInterface.PrintWarning($"Invalid IPv4 CIDR in input file '{path}': {cleanPart}");
                 }
@@ -291,7 +298,7 @@ public static class FileUtils
                 else
                     CFScanner.UI.ConsoleInterface.PrintWarning($"Invalid IPv4 address in input file '{path}': {cleanPart}");
             }
-        });
+        }, ct);
         return list;
     }
 
