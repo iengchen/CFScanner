@@ -153,24 +153,11 @@ public class IpFilter
         /// <returns>Sequence of IPAddress objects.</returns>
         public static IEnumerable<IPAddress> GetIps(string dbPath, List<string> targets)
         {
-            var searchSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var t in targets) searchSet.Add(t.Trim());
+            var matcher = CreateMatcher(targets);
 
             foreach (var line in File.ReadLines(dbPath))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
-
-                // Quick pre‑filter: line must contain at least one target substring.
-                bool likelyMatch = false;
-                foreach (var t in searchSet)
-                {
-                    if (line.Contains(t, StringComparison.OrdinalIgnoreCase))
-                    {
-                        likelyMatch = true;
-                        break;
-                    }
-                }
-                if (!likelyMatch) continue;
 
                 var parts = line.Split(['\t', ' '], StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 3) continue;
@@ -178,12 +165,7 @@ public class IpFilter
                 string asn = parts[2];
                 string desc = parts.Length > 3 ? string.Join(" ", parts[3..]) : "";
 
-                // Match on AS number (with or without "AS" prefix) or description.
-                bool match = searchSet.Contains(asn) ||
-                             searchSet.Contains("AS" + asn) ||
-                             searchSet.Any(s => desc.Contains(s, StringComparison.OrdinalIgnoreCase));
-
-                if (match)
+                if (matcher.IsMatch(asn, desc))
                 {
                     uint start = IpToUint(parts[0]);
                     uint end = IpToUint(parts[1]);
@@ -206,24 +188,11 @@ public class IpFilter
         /// <returns>Sequence of (start, end) pairs.</returns>
         public static IEnumerable<(uint Start, uint End)> GetRanges(string dbPath, List<string> targets)
         {
-            var searchSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var t in targets) searchSet.Add(t.Trim());
+            var matcher = CreateMatcher(targets);
 
             foreach (var line in File.ReadLines(dbPath))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
-
-                // Quick pre‑filter
-                bool likelyMatch = false;
-                foreach (var t in searchSet)
-                {
-                    if (line.Contains(t, StringComparison.OrdinalIgnoreCase))
-                    {
-                        likelyMatch = true;
-                        break;
-                    }
-                }
-                if (!likelyMatch) continue;
 
                 var parts = line.Split(['\t', ' '], StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 3) continue;
@@ -231,13 +200,34 @@ public class IpFilter
                 string asn = parts[2];
                 string desc = parts.Length > 3 ? string.Join(" ", parts[3..]) : "";
 
-                bool match = searchSet.Contains(asn) ||
-                             searchSet.Contains("AS" + asn) ||
-                             searchSet.Any(s => desc.Contains(s, StringComparison.OrdinalIgnoreCase));
-
-                if (match)
+                if (matcher.IsMatch(asn, desc))
                     yield return (IpToUint(parts[0]), IpToUint(parts[1]));
             }
+        }
+
+        private static AsnMatcher CreateMatcher(IEnumerable<string> targets)
+        {
+            var asns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var descriptions = new List<string>();
+            foreach (var target in targets.Select(value => value.Trim()).Where(value => value.Length > 0))
+            {
+                var normalized = target.StartsWith("AS", StringComparison.OrdinalIgnoreCase)
+                    ? target[2..]
+                    : target;
+                if (normalized.Length > 0 && normalized.All(char.IsAsciiDigit))
+                    asns.Add(normalized);
+                else
+                    descriptions.Add(target);
+            }
+
+            return new AsnMatcher(asns, descriptions);
+        }
+
+        private sealed record AsnMatcher(HashSet<string> Asns, List<string> Descriptions)
+        {
+            public bool IsMatch(string asn, string description) =>
+                Asns.Contains(asn) ||
+                Descriptions.Any(target => description.Contains(target, StringComparison.OrdinalIgnoreCase));
         }
 
         // Convert an IP string to a uint (big‑endian order).

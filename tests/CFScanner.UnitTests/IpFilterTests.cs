@@ -134,7 +134,7 @@ public sealed class IpFilterTests
         TestState.Reset();
         var dbPath = Path.Combine(Path.GetTempPath(), $"cfscanner-asn-{Guid.NewGuid():N}.tsv");
         await File.WriteAllTextAsync(dbPath,
-            "1.0.0.0\t1.0.0.255\t13335\tAS13335 CLOUDFLARE INC\n" +
+            "1.0.0.0\t1.0.0.255\t13335\tCLOUDFLARE INC\n" +
             "1.0.1.0\t1.0.1.255\t12345\tAS12345 Other ASN\n" +
             "8.8.8.0\t8.8.8.255\t15169\tAS15169 GOOGLE LLC\n");
         try
@@ -147,8 +147,8 @@ public sealed class IpFilterTests
 
             TestState.Reset();
 
-            // 2. AS-prefix variant: the pre-filter requires the literal target to appear
-            // somewhere in the line, so the fixture includes "AS13335" in the description.
+            // 2. AS-prefix variant must match the ASN column even when the
+            // description does not contain the prefix.
             await GlobalContext.IpFilter.BuildAsync([], [], ["AS13335"], dbPath);
             Assert.True(GlobalContext.IpFilter.IsBlocked(IPAddress.Parse("1.0.0.1")));
 
