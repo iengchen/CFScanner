@@ -370,22 +370,6 @@ override می‌کنند. bufferها در صورت تعیین نشدن، بر ا
 قبلی، از `cfscanner --resume --new` استفاده کنید. این گزینه با
 `--resume-session` قابل ترکیب نیست.
 
-## تست
-
-راهکار شامل پروژه‌های تست xUnit v3 در مسیر `tests/` است: تست واحد،
-یکپارچهٔ محدود به loopback و تست انتها‌به‌انتها که به‌صورت پیش‌فرض غیرفعال است.
-اجرای معمول به شبکهٔ عمومی، پایگاه ASN یا Xray نیاز ندارد:
-
-```powershell
-dotnet test CFScanner.sln
-dotnet test CFScanner.sln -- --filter-trait "Category=Unit"
-dotnet test CFScanner.sln -- --filter-not-trait "Category=E2E"
-dotnet test CFScanner.sln --coverage
-```
-
-برای اجرای E2E، متغیر `CFSCANNER_RUN_E2E=1` را تنظیم کنید. تست‌های واقعی Xray
-نیز فقط با `CFSCANNER_RUN_XRAY_TESTS=1` فعال می‌شوند.
-
 ------------------------------------------------------------------------
 
 ## ⚠️ سلب مسئولیت
